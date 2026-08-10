@@ -1,0 +1,391 @@
+import { useRef } from 'react'
+import type { MutableRefObject, RefObject } from 'react'
+import * as THREE from 'three'
+import { useFrame } from '@react-three/fiber'
+import type { MouseState } from './useMouseTracking'
+
+/** Campo del formulario que puede tener el foco */
+export type FocusField = 'email' | 'password' | 'button'
+
+/**
+ * Elemento de la interfaz que el robot debe mirar, con su posición REAL
+ * en pantalla (píxeles): la cabeza se apunta geométricamente hacia ese
+ * punto, igual que hacia el cursor.
+ */
+export type FocusTarget = { field: FocusField; px: number; py: number } | null
+
+/** Gesto puntual del robot (asentir al iniciar sesión, negar ante un error) */
+export interface RobotAction {
+  type: 'nod' | 'shake'
+  /** Se rellena con el tiempo del reloj de la escena en el primer frame */
+  at: number
+}
+
+export interface RobotRefs {
+  robot: RefObject<THREE.Group>
+  /** Puede ser un grupo o un HUESO del esqueleto (se anima igual) */
+  head: RefObject<THREE.Object3D>
+  eyes: RefObject<THREE.Group>
+  pupils: RefObject<THREE.Group>
+  body: RefObject<THREE.Object3D>
+  leftArm: RefObject<THREE.Object3D>
+  rightArm: RefObject<THREE.Object3D>
+  antenna: RefObject<THREE.Group>
+  screenFlash: RefObject<THREE.Mesh>
+  /** Párpados 2.5D: crecen para cubrir el ojo (inverso al parpadeo clásico) */
+  eyelids?: RefObject<THREE.Group>
+  /** Torso: acompaña sutilmente el giro de la cabeza */
+  spine?: RefObject<THREE.Object3D>
+  /** Antebrazos: codos para el saludo y balanceo natural */
+  leftForearm?: RefObject<THREE.Object3D>
+  rightForearm?: RefObject<THREE.Object3D>
+}
+
+/** Rotación de reposo del hueso: las animaciones se SUMAN a esta base */
+const restOf = (o: THREE.Object3D): { x: number; y: number; z: number } =>
+  (o.userData.restRot as { x: number; y: number; z: number }) ?? { x: 0, y: 0, z: 0 }
+
+// vectores reutilizables para la puntería de la cabeza (sin crear basura)
+const _ray = new THREE.Vector3()
+const _target = new THREE.Vector3()
+const _headPos = new THREE.Vector3()
+
+const MAX_YAW = THREE.MathUtils.degToRad(38) // ±38° horizontal
+const MAX_PITCH = THREE.MathUtils.degToRad(24) // ±24° vertical
+const SPINE_FOLLOW = 0.28 // el torso acompaña esta fracción del giro
+const ACTION_DURATION = 0.9 // segundos
+const BLINK_DURATION = 0.24 // parpadeo bien visible
+
+/* Balanceo de brazos — ajusta estos valores a gusto */
+const ARM_SPEED = 0.85 // velocidad (rad/s del ciclo; menor = más lento)
+const ARM_SWING = 0.17 // amplitud del péndulo adelante/atrás (radianes)
+const ARM_FLAP_BASE = 0.02 // apertura lateral base (separación del cuerpo)
+const ARM_FLAP = 0.065 // amplitud del aleteo lateral
+
+/*
+ * Gestos divertidos aleatorios durante la espera:
+ *  - spin:   da una vuelta completa sobre sí mismo
+ *  - hop:    da dos saltitos con los brazos abiertos
+ *  - shimmy: bailecito girando el cuerpo con brazos alternados
+ *  - peek:   mira curioso a un lado y al otro
+ *  - wave:   saluda con el brazo derecho (boca entreabierta, dice hola)
+ *  - laugh:  se ríe: la boca traquetea y el cuerpo rebota
+ */
+const QUIRKS = ['spin', 'hop', 'shimmy', 'peek', 'wave', 'laugh'] as const
+type Quirk = (typeof QUIRKS)[number]
+const QUIRK_DURATION: Record<Quirk, number> = {
+  spin: 1.7,
+  hop: 1.4,
+  shimmy: 1.6,
+  peek: 2.4,
+  wave: 2.0,
+  laugh: 1.8,
+}
+const QUIRK_MIN_GAP = 6 // segundos mínimos entre gestos
+const QUIRK_MAX_GAP = 14
+
+const lerp = THREE.MathUtils.lerp
+const clamp = THREE.MathUtils.clamp
+
+export function useRobotAnimation(
+  refs: RobotRefs,
+  mouse: MutableRefObject<MouseState>,
+  focusRef: MutableRefObject<FocusTarget>,
+  actionRef: MutableRefObject<RobotAction | null>,
+  reducedMotion: boolean,
+) {
+  // Estado suavizado entre frames (no provoca renders)
+  const s = useRef({
+    yaw: 0,
+    pitch: 0,
+    tilt: 0,
+    lid: 1,
+    pupX: 0,
+    pupY: 0,
+    nextBlink: 2.5,
+    blinkStart: -10,
+    quirk: null as Quirk | null,
+    quirkStart: 0,
+    nextQuirk: 5,
+  })
+
+  useFrame((state, delta) => {
+    const t = state.clock.elapsedTime
+    const st = s.current
+    const k = 1 - Math.exp(-delta * 5) // factor de interpolación estable
+
+    // ---- 1. Objetivo de mirada: apuntar EXACTO al punto en pantalla ----
+    // Se proyecta el píxel del cursor (o del campo enfocado) a un punto
+    // del mundo 3D delante del robot y se calculan los ángulos reales de
+    // la cabeza hacia ese punto: la cabeza "lo mira" de verdad.
+    const focus = focusRef.current
+    let lookX = 0
+    let lookY = 0
+    let tiltTarget = 0
+    let lidTarget = 1
+    let targetYaw = 0
+    let targetPitch = 0
+
+    let px: number | null = null
+    let py = 0
+    if (focus) {
+      px = focus.px
+      py = focus.py
+      if (focus.field === 'email') tiltTarget = 0.08 // curiosidad leve
+      else if (focus.field === 'password') tiltTarget = -0.05
+    } else if (mouse.current.inside) {
+      px = mouse.current.px
+      py = mouse.current.py
+    }
+    // si el mouse salió de la ventana y no hay foco: vuelve al centro
+
+    if (px !== null && refs.head.current) {
+      const camera = state.camera
+      const rect = state.gl.domElement.getBoundingClientRect()
+      // píxel → NDC del canvas (puede quedar fuera de [-1,1] si el punto
+      // está sobre el formulario: la dirección sigue siendo la correcta)
+      const ndcX = ((px - rect.left) / rect.width) * 2 - 1
+      const ndcY = -(((py - rect.top) / rect.height) * 2 - 1)
+      lookX = clamp(ndcX, -1, 1)
+      lookY = clamp(ndcY, -1, 1)
+      // rayo de la cámara a través del píxel
+      _ray.set(ndcX, ndcY, 0.5).unproject(camera).sub(camera.position).normalize()
+      // punto del rayo sobre un plano vertical delante del robot
+      refs.head.current.getWorldPosition(_headPos)
+      const planeZ = _headPos.z + (camera.position.z - _headPos.z) * 0.45
+      const sRay = (planeZ - camera.position.z) / (_ray.z || -1e-6)
+      _target.copy(camera.position).addScaledVector(_ray, sRay)
+      // ángulos de la cabeza hacia el punto (el robot mira hacia +Z)
+      _target.sub(_headPos)
+      targetYaw = clamp(Math.atan2(_target.x, _target.z), -MAX_YAW, MAX_YAW)
+      targetPitch = clamp(
+        Math.atan2(_target.y, Math.hypot(_target.x, _target.z)),
+        -MAX_PITCH,
+        MAX_PITCH,
+      )
+    }
+
+    // ---- 2. Gesto activo (asentir / negar) ----
+    let actPitch = 0
+    let actYaw = 0
+    let flash = 0
+    const action = actionRef.current
+    if (action && !reducedMotion) {
+      if (action.at < 0) action.at = t
+      const p = (t - action.at) / ACTION_DURATION
+      if (p >= 1) {
+        actionRef.current = null
+      } else {
+        const env = Math.sin(Math.PI * p) // entra y sale suave
+        if (action.type === 'nod') {
+          // el asentimiento arranca bajando la cabeza (X negativa = abajo)
+          actPitch = -Math.sin(p * Math.PI * 2.5) * 0.3 * env
+          flash = env // confirmación en la pantalla del pecho
+        } else {
+          actYaw = Math.sin(p * Math.PI * 3) * 0.26 * env
+        }
+      }
+    } else if (action && reducedMotion) {
+      // Con movimiento reducido solo mostramos la confirmación del pecho
+      if (action.at < 0) action.at = t
+      const p = (t - action.at) / ACTION_DURATION
+      if (p >= 1) actionRef.current = null
+      else if (action.type === 'nod') flash = Math.sin(Math.PI * p)
+    }
+
+    // ---- 2b. Gesto divertido aleatorio (solo en espera) ----
+    let qHeadYaw = 0
+    let qHeadPitch = 0
+    let qHeadRoll = 0
+    let qBodyY = 0
+    let qBodyRotY = 0
+    let qArmLX = 0
+    let qArmLZ = 0
+    let qArmRX = 0
+    let qArmRZ = 0
+    let qForeRX = 0
+    if (!reducedMotion) {
+      // solo arranca un gesto si el robot está tranquilo (sin foco ni gesto de login)
+      if (!st.quirk && !action && !focus && t >= st.nextQuirk) {
+        st.quirk = QUIRKS[Math.floor(Math.random() * QUIRKS.length)]
+        st.quirkStart = t
+      }
+      if (st.quirk) {
+        const p = (t - st.quirkStart) / QUIRK_DURATION[st.quirk]
+        if (p >= 1 || action) {
+          // un nod/shake del formulario interrumpe el gesto
+          st.quirk = null
+          st.nextQuirk = t + QUIRK_MIN_GAP + Math.random() * (QUIRK_MAX_GAP - QUIRK_MIN_GAP)
+        } else {
+          const env = Math.sin(Math.PI * p) // entra y sale suave
+          if (st.quirk === 'spin') {
+            // vuelta completa con los BRAZOS EN ALTO y un brinquito
+            const e = p * p * (3 - 2 * p) // easing suave, termina en 360°
+            qBodyRotY = Math.PI * 2 * e
+            qBodyY = env * 0.05
+            qArmLZ = env * 1.5
+            qArmRZ = -env * 1.5
+          } else if (st.quirk === 'hop') {
+            // dos saltitos con los brazos abiertos (amplitud contenida:
+            // el grupo está escalado y un salto grande saca al robot de
+            // la pantalla)
+            qBodyY = Math.abs(Math.sin(p * Math.PI * 3)) * 0.09 * env
+            qHeadPitch = env * 0.08 // mirada alegre hacia arriba
+            qHeadRoll = Math.sin(p * Math.PI * 3) * 0.06 * env
+            qArmLZ = env * 0.6
+            qArmRZ = -env * 0.6
+          } else if (st.quirk === 'shimmy') {
+            // bailecito: el cuerpo gira alternado con brazos al ritmo
+            qBodyRotY = Math.sin(p * Math.PI * 6) * 0.13 * env
+            qHeadRoll = Math.sin(p * Math.PI * 6 + 1) * 0.09 * env
+            qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.025 * env
+            qArmLX = Math.sin(p * Math.PI * 6) * 0.3 * env
+            qArmRX = -Math.sin(p * Math.PI * 6) * 0.3 * env
+          } else if (st.quirk === 'peek') {
+            // mira curioso a un lado y al otro
+            qHeadYaw = Math.sin(p * Math.PI * 2) * 0.38 * env
+            qBodyRotY = Math.sin(p * Math.PI * 2) * 0.08 * env
+            qHeadPitch = env * 0.05
+          } else if (st.quirk === 'wave') {
+            // saluda: brazo derecho en alto y el ANTEBRAZO se agita
+            // (codo de verdad)
+            qArmRZ = -env * 1.7
+            qForeRX = (0.5 + Math.sin(p * Math.PI * 7) * 0.45) * env
+            qHeadRoll = -env * 0.1
+          } else if (st.quirk === 'laugh') {
+            // carcajada: el cuerpo rebota y la cabeza se echa atrás
+            qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.03 * env
+            qHeadPitch = env * 0.16
+            qArmLZ = env * 0.25
+            qArmRZ = -env * 0.25
+          }
+        }
+      }
+    }
+
+    // ---- 3. Animación de espera (idle) ----
+    let idleBob = 0
+    let idleTilt = 0
+    let idleAntenna = 0
+    let idleArm = 0
+    let idleHeadPitch = 0
+    if (!reducedMotion) {
+      // vaivén SOLO hacia arriba: los pies nunca se hunden bajo el piso
+      idleBob = (Math.sin(t * 1.1) * 0.5 + 0.5) * 0.028
+      // inclinación ocasional y muy lenta de la cabeza
+      idleTilt = 0.07 * Math.sin(t * 0.4) * Math.pow(Math.sin(t * 0.09) * 0.5 + 0.5, 3)
+      idleHeadPitch = Math.sin(t * 0.7) * 0.02
+      idleAntenna = Math.sin(t * 2.0) * 0.09
+      idleArm = Math.sin(t * 1.1 + 1) * 0.05
+    }
+
+    // ---- 4. Suavizado (lerp) ----
+    const followScale = reducedMotion ? 0.35 : 1 // con motion reducido, casi estático
+    // la cabeza sigue al cursor con más reacción que el resto del cuerpo
+    // (en este esqueleto, rotación X positiva = cabeza ARRIBA — validado
+    // en vivo: el objetivo con cursor arriba debe ser positivo)
+    const kf = 1 - Math.exp(-delta * 10)
+    st.yaw = lerp(st.yaw, targetYaw * followScale, kf)
+    st.pitch = lerp(st.pitch, targetPitch * followScale, kf)
+    st.tilt = lerp(st.tilt, tiltTarget, k)
+    st.lid = lerp(st.lid, lidTarget, k)
+    // mirada normalizada (-1..1); cada globo ocular rota hacia el objetivo
+    st.pupX = lerp(st.pupX, lookX, k * 1.6)
+    st.pupY = lerp(st.pupY, lookY, k * 1.6)
+
+    // ---- 5. Parpadeo frecuente (a veces doble) ----
+    let blinkScale = 1
+    if (!reducedMotion) {
+      if (t >= st.nextBlink) {
+        st.blinkStart = t
+        // 25% de las veces parpadea dos veces seguidas
+        st.nextBlink = t + (Math.random() < 0.25 ? 0.35 : 1.4 + Math.random() * 2)
+      }
+      const bp = (t - st.blinkStart) / BLINK_DURATION
+      if (bp >= 0 && bp <= 1) {
+        blinkScale = 1 - Math.sin(bp * Math.PI) * 0.92
+      }
+    }
+
+    // ---- 6. Aplicar a los grupos ----
+    const { head, eyes, pupils, body, leftArm, rightArm, antenna, screenFlash, eyelids } = refs
+    const { spine, leftForearm, rightForearm } = refs
+
+    if (head.current) {
+      const hr = restOf(head.current)
+      head.current.rotation.y = hr.y + st.yaw + actYaw + qHeadYaw
+      head.current.rotation.x = hr.x + st.pitch + actPitch + idleHeadPitch + qHeadPitch
+      head.current.rotation.z = hr.z + st.tilt + idleTilt + qHeadRoll
+    }
+    // el torso acompaña una fracción del giro: seguimiento más corporal
+    if (spine?.current) {
+      const sr = restOf(spine.current)
+      spine.current.rotation.y = sr.y + st.yaw * SPINE_FOLLOW
+      spine.current.rotation.x = sr.x + st.pitch * SPINE_FOLLOW * 0.5
+      spine.current.rotation.z = sr.z + st.tilt * 0.4
+    }
+    const openness = blinkScale * st.lid // 1 = ojo abierto, 0 = cerrado
+    const glowMat = eyes.current?.userData.glowMat as THREE.MeshBasicMaterial | undefined
+    if (glowMat) {
+      // pestañeo: los ojos se oscurecen casi a negro (párpado cerrado)
+      const base = (eyes.current!.userData.glowColor as THREE.Color) ?? glowMat.color
+      const g = 0.02 + 0.98 * openness
+      glowMat.color.copy(base).multiplyScalar(g)
+    }
+    if (eyelids?.current) {
+      // modo 2.5D: el párpado baja cubriendo el ojo de la imagen
+      eyelids.current.scale.y = clamp(1 - openness, 0.0001, 1)
+    } else if (eyes.current) {
+      eyes.current.scale.y = Math.max(0.08, openness)
+    }
+    if (pupils.current) {
+      // los hijos de "pupils" son los pivotes de cada globo ocular
+      const gazeYaw = st.pupX * 0.35
+      const gazePitch = -st.pupY * 0.22
+      for (const eyePivot of pupils.current.children) {
+        eyePivot.rotation.y = gazeYaw
+        eyePivot.rotation.x = gazePitch
+      }
+    }
+    if (body.current) {
+      body.current.position.y = idleBob + qBodyY
+      body.current.rotation.y = qBodyRotY
+    }
+    // balanceo de brazos: péndulo alternado + aleteo lateral visible de frente
+    const armSwing = reducedMotion ? 0 : Math.sin(t * ARM_SPEED) * ARM_SWING
+    const armFlap = reducedMotion
+      ? 0
+      : ARM_FLAP_BASE + (Math.sin(t * ARM_SPEED + 0.9) * 0.5 + 0.5) * ARM_FLAP
+    if (leftArm.current) {
+      const lr = restOf(leftArm.current)
+      leftArm.current.rotation.x = lr.x + armSwing + qArmLX
+      leftArm.current.rotation.z = lr.z - armFlap + qArmLZ
+    }
+    if (rightArm.current) {
+      const rr = restOf(rightArm.current)
+      rightArm.current.rotation.x = rr.x - armSwing + qArmRX
+      rightArm.current.rotation.z = rr.z + armFlap + qArmRZ
+    }
+    // antebrazos: leve flexión de codo en contrafase (brazos más vivos)
+    const elbow = reducedMotion ? 0 : 0.1 + Math.sin(t * ARM_SPEED + 2.1) * 0.08
+    if (leftForearm?.current) {
+      const fr = restOf(leftForearm.current)
+      leftForearm.current.rotation.x = fr.x + elbow - armSwing * 0.5
+    }
+    if (rightForearm?.current) {
+      const fr = restOf(rightForearm.current)
+      rightForearm.current.rotation.x = fr.x + elbow + armSwing * 0.5 + qForeRX
+    }
+    if (antenna.current) {
+      // la antena oscila y además reacciona al giro de la cabeza
+      antenna.current.rotation.z = idleAntenna - st.yaw * 0.6
+      antenna.current.rotation.x = -st.pitch * 0.4
+    }
+    if (screenFlash.current) {
+      const mat = screenFlash.current.material as THREE.MeshBasicMaterial
+      mat.opacity = flash * 0.85
+      const sc = 1 + flash * 0.08
+      screenFlash.current.scale.set(sc, sc, 1)
+    }
+  })
+}

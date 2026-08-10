@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Prueba del rig del robot</title>
+<style>body { margin: 0; background: #0a1428; }</style>
+</head>
+<body>
+<canvas id="c" width="960" height="720"></canvas>
+<script type="module">
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+
+// réplica del montaje de RobotModel.tsx (modelo riggeado)
+const WORLD_H = 4.4
+const FLOOR_Y = -2.18
+
+const canvas = document.getElementById('c')
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true })
+renderer.setSize(960, 720, false)
+renderer.setScissorTest(true)
+
+const gltf = await new GLTFLoader().loadAsync('/models/paolo-robot.glb')
+const scene3 = new THREE.Scene()
+scene3.background = new THREE.Color('#0a1428')
+scene3.add(new THREE.AmbientLight(0xffffff, 0.95))
+const d1 = new THREE.DirectionalLight(0xffffff, 1.1)
+d1.position.set(3.5, 5, 5)
+scene3.add(d1)
+const d2 = new THREE.DirectionalLight(0xffffff, 0.45)
+d2.position.set(-4, 2, -2)
+scene3.add(d2)
+
+const scene = gltf.scene
+scene.rotation.y = -Math.PI / 2
+scene.updateMatrixWorld(true)
+
+const root = new THREE.Group()
+const bobGroup = new THREE.Group()
+root.add(bobGroup)
+bobGroup.add(scene)
+scene3.add(root)
+
+// huesos
+const head = scene.getObjectByName('Head')
+const spine = scene.getObjectByName('Spine02')
+const lArm = scene.getObjectByName('L_Upperarm')
+const rArm = scene.getObjectByName('R_Upperarm')
+const rFore = scene.getObjectByName('R_Forearm')
+const rest = (b) => ({ x: b.rotation.x, y: b.rotation.y, z: b.rotation.z })
+const headRest = rest(head)
+const spineRest = rest(spine)
+const lRest = rest(lArm)
+const rRest = rest(rArm)
+const rForeRest = rest(rFore)
+
+// mallas
+let bodySkin = null
+let eyesSkin = null
+scene.traverse((o) => {
+  if (!o.isMesh) return
+  o.frustumCulled = false
+  if (o.name === 'Eyes') eyesSkin = o
+  else if (!bodySkin || o.name === 'Body') bodySkin = o
+})
+
+// normalizar
+const sceneBox = new THREE.Box3().expandByObject(bodySkin)
+const sceneCenter = sceneBox.getCenter(new THREE.Vector3())
+const sceneSize = sceneBox.getSize(new THREE.Vector3())
+const scale = WORLD_H / sceneSize.y
+root.scale.setScalar(scale)
+root.position.set(-sceneCenter.x * scale, FLOOR_Y - sceneBox.min.y * scale, -sceneCenter.z * scale)
+
+// plataforma
+const plat = new THREE.Mesh(
+  new THREE.CylinderGeometry(1.7, 1.95, 0.18, 48),
+  new THREE.MeshStandardMaterial({ color: '#16305c', metalness: 0.35, roughness: 0.55 }),
+)
+plat.position.set(0, FLOOR_Y - 0.09, 0)
+scene3.add(plat)
+const aro = new THREE.Mesh(
+  new THREE.RingGeometry(1.52, 1.62, 48),
+  new THREE.MeshBasicMaterial({ color: '#4f8cff', transparent: true, opacity: 0.55, toneMapped: false }),
+)
+aro.rotation.x = -Math.PI / 2
+aro.position.set(0, FLOOR_Y + 0.002, 0)
+scene3.add(aro)
+
+// vistas: piernas rz +0.8/-0.8 / pierna izq levantada 1.5 / brazo levantado / reposo
+const lThigh = scene.getObjectByName('L_Thigh')
+const rThigh = scene.getObjectByName('R_Thigh')
+const lThighRest = rest(lThigh)
+const rThighRest = rest(rThigh)
+const views = [
+  { legZ: 0.8, legL: 0, armZ: 0 },
+  { legZ: 0, legL: 1.5, armZ: 0 },
+  { legZ: 0, legL: 0, armZ: 1.5 },
+  { legZ: 0, legL: 0, armZ: 0 },
+]
+const W = 480
+const H = 360
+views.forEach((view, i) => {
+  head.rotation.set(headRest.x, headRest.y, headRest.z)
+  spine.rotation.set(spineRest.x, spineRest.y, spineRest.z)
+  bobGroup.position.y = 0
+  lArm.rotation.set(lRest.x, lRest.y, lRest.z + view.armZ)
+  rArm.rotation.set(rRest.x, rRest.y, rRest.z)
+  rFore.rotation.set(rForeRest.x, rForeRest.y, rForeRest.z)
+  lThigh.rotation.set(lThighRest.x, lThighRest.y, lThighRest.z + view.legZ + view.legL)
+  rThigh.rotation.set(rThighRest.x, rThighRest.y, rThighRest.z - view.legZ)
+  scene.updateMatrixWorld(true)
+  const cam = new THREE.PerspectiveCamera(40, W / H, 0.01, 100)
+  cam.position.set(0, 0, 7.4)
+  cam.lookAt(0, 0, 0)
+  const x = (i % 2) * W
+  const y = i < 2 ? H : 0
+  renderer.setViewport(x, y, W, H)
+  renderer.setScissor(x, y, W, H)
+  renderer.render(scene3, cam)
+})
+
+window.__png = canvas.toDataURL('image/png').split(',')[1]
+window.__len = window.__png.length
+document.title = 'LISTO ' + window.__len
+</script>
+</body>
+</html>
