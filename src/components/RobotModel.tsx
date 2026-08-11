@@ -384,14 +384,14 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }
     updateLimb(pu.LL, pu.hipL, 1, 2.2, 0)
     updateLimb(pu.RL, pu.hipR, -1, 2.2, 0)
     // brazos: se SUMA a lo que el hook ya aplicó este frame (corre antes)
-    // (rotación X negativa = hacia la cámara, verificado en render)
+    // (rotación X POSITIVA = hacia la cámara, corregido en vivo)
     rig.leftArm.rotation.z += pu.L.angZ
-    rig.leftArm.rotation.x -= pu.L.angX
+    rig.leftArm.rotation.x += pu.L.angX
     rig.rightArm.rotation.z -= pu.R.angZ
-    rig.rightArm.rotation.x -= pu.R.angX
+    rig.rightArm.rotation.x += pu.R.angX
     // el codo acompaña: cuelga al alzar de lado y se estira al apuntar
-    rig.leftForearm.rotation.x += pu.L.angZ * 0.12 - pu.L.angX * 0.25
-    rig.rightForearm.rotation.x += pu.R.angZ * 0.12 - pu.R.angX * 0.25
+    rig.leftForearm.rotation.x += pu.L.angZ * 0.12 + pu.L.angX * 0.25
+    rig.rightForearm.rotation.x += pu.R.angZ * 0.12 + pu.R.angX * 0.25
     // piernas: el hook no las toca, se fija sobre la pose de reposo
     const restZ = (o: THREE.Object3D) =>
       (o.userData.restRot as { z: number } | undefined)?.z ?? 0
