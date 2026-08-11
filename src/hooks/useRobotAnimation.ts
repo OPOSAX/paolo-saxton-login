@@ -220,6 +220,7 @@ export function useRobotAnimation(
     let qBodyRotX = 0
     let qWaveRaise = 0 // alza del brazo HACIA LA CÁMARA (eje de mundo)
     let qLookDamp = 0 // 1 = ignora el cursor y mira al frente (saludo)
+    let qHandOpen = 0 // 0 = puño, 1 = dedos abiertos (pulso del saludo)
     if (!reducedMotion) {
       // gesto pedido desde la interfaz: arranca de inmediato
       if (quirkRef?.current) {
@@ -272,6 +273,8 @@ export function useRobotAnimation(
             const twist = Math.sin(p * Math.PI * 7) * env
             qForeRY = twist * 0.5
             qHandRY = twist * 0.6
+            // la mano ABRE y CIERRA los dedos al ritmo del saludo
+            qHandOpen = (0.5 + 0.5 * Math.sin(p * Math.PI * 7 + Math.PI / 2)) * env
             qHeadRoll = -env * 0.08
             qLookDamp = env
           } else if (st.quirk === 'laugh') {
@@ -444,6 +447,9 @@ export function useRobotAnimation(
     if (refs.rightHand?.current) {
       const hr2 = restOf(refs.rightHand.current)
       refs.rightHand.current.rotation.y = hr2.y + qHandRY // muñeca atornillando
+      // dedos: la mano se ensancha (abierta) y contrae (puño) — el eje Y
+      // local corre a lo largo del brazo, X/Z son el ancho de la mano
+      refs.rightHand.current.scale.set(1 + qHandOpen * 0.4, 1 - qHandOpen * 0.08, 1 + qHandOpen * 0.4)
     }
     // saludo frontal: alza el brazo hacia la cámara girando en eje de
     // mundo (independiente de la pose local del hueso)
