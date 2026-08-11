@@ -92,11 +92,13 @@ const lThigh = scene.getObjectByName('L_Thigh')
 const rThigh = scene.getObjectByName('R_Thigh')
 const lThighRest = rest(lThigh)
 const rThighRest = rest(rThigh)
+// vista lateral (az=π/2): el FRENTE del robot queda a la IZQUIERDA de la
+// imagen — sirve para ver qué signo de rotation.x va hacia adelante
 const views = [
-  { legZ: 0.8, legL: 0, armZ: 0 },
-  { legZ: 0, legL: 1.5, armZ: 0 },
-  { legZ: 0, legL: 0, armZ: 1.5 },
-  { legZ: 0, legL: 0, armZ: 0 },
+  { armX: 0.9, az: Math.PI / 2 },
+  { armX: -0.9, az: Math.PI / 2 },
+  { armX: 0.9, az: Math.PI / 4 },
+  { armX: -0.9, az: Math.PI / 4 },
 ]
 const W = 480
 const H = 360
@@ -104,14 +106,14 @@ views.forEach((view, i) => {
   head.rotation.set(headRest.x, headRest.y, headRest.z)
   spine.rotation.set(spineRest.x, spineRest.y, spineRest.z)
   bobGroup.position.y = 0
-  lArm.rotation.set(lRest.x, lRest.y, lRest.z + view.armZ)
-  rArm.rotation.set(rRest.x, rRest.y, rRest.z)
+  lArm.rotation.set(lRest.x + view.armX, lRest.y, lRest.z)
+  rArm.rotation.set(rRest.x + view.armX, rRest.y, rRest.z)
   rFore.rotation.set(rForeRest.x, rForeRest.y, rForeRest.z)
-  lThigh.rotation.set(lThighRest.x, lThighRest.y, lThighRest.z + view.legZ + view.legL)
-  rThigh.rotation.set(rThighRest.x, rThighRest.y, rThighRest.z - view.legZ)
+  lThigh.rotation.set(lThighRest.x, lThighRest.y, lThighRest.z)
+  rThigh.rotation.set(rThighRest.x, rThighRest.y, rThighRest.z)
   scene.updateMatrixWorld(true)
   const cam = new THREE.PerspectiveCamera(40, W / H, 0.01, 100)
-  cam.position.set(0, 0, 7.4)
+  cam.position.set(Math.sin(view.az) * 7.4, 0, Math.cos(view.az) * 7.4)
   cam.lookAt(0, 0, 0)
   const x = (i % 2) * W
   const y = i < 2 ? H : 0

@@ -226,10 +226,11 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }
    */
   const spin = useRef({ angle: 0, vel: 0, dragging: false, lastX: 0 })
   const puppet = useRef({
-    L: { angle: 0, vel: 0, grabbed: false },
-    R: { angle: 0, vel: 0, grabbed: false },
-    LL: { angle: 0, vel: 0, grabbed: false }, // pierna izquierda
-    RL: { angle: 0, vel: 0, grabbed: false }, // pierna derecha
+    // angZ = elevación lateral · angX = extensión hacia la pantalla
+    L: { angZ: 0, velZ: 0, angX: 0, velX: 0, grabbed: false },
+    R: { angZ: 0, velZ: 0, angX: 0, velX: 0, grabbed: false },
+    LL: { angZ: 0, velZ: 0, angX: 0, velX: 0, grabbed: false }, // pierna izq
+    RL: { angZ: 0, velZ: 0, angX: 0, velX: 0, grabbed: false }, // pierna der
     px: 0,
     py: 0,
     // puntos de agarre en pantalla [x, y] (codo/mano y rodilla/pie)
@@ -334,48 +335,73 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }
     pu.hipR = proj(rig.rightThigh)
 
     const clamp = THREE.MathUtils.clamp
-    const updateArm = (
-      a: { angle: number; vel: number; grabbed: boolean },
-      sh: [number, number],
-      side: 1 | -1,
-      maxA = 2.75,
-    ) => {
+    interface Limb {
+      angZ: number
+      velZ: number
+      angX: number
+      velX: number
+      grabbed: boolean
+    }
+    const updateLimb = (a: Limb, sh: [number, number], side: 1 | -1, maxZ: number, maxX: number) => {
       if (a.grabbed) {
-        // ángulo del pivote hacia el puntero (0 = extremidad colgando)
-        const target = clamp(Math.atan2((pu.px - sh[0]) * side, pu.py - sh[1]), -0.25, maxA)
-        const prev = a.angle
-        a.angle += (target - a.angle) * (1 - Math.exp(-delta * 22))
-        a.vel = (a.angle - prev) / Math.max(delta, 1e-3)
-      } else if (Math.abs(a.angle) > 0.0005 || Math.abs(a.vel) > 0.0005) {
+        /*
+         * Dos ejes desde el mismo gesto: arrastrar HACIA AFUERA eleva la
+         * extremidad de lado (Z); arrastrar HACIA EL CENTRO del cuerpo la
+         * estira HACIA LA PANTALLA (X). La mezcla es continua.
+         */
+        const dxOut = (pu.px - sh[0]) * side
+        const dyDown = pu.py - sh[1]
+        const alza = clamp(Math.atan2(Math.abs(dxOut), dyDown), -0.2, 2.75)
+        const lado = 0.5 + 0.5 * Math.tanh(dxOut / 60)
+        const targetZ = clamp(alza * lado, -0.2, maxZ)
+        const targetX = clamp(alza * (1 - lado), 0, maxX)
+        const k = 1 - Math.exp(-delta * 22)
+        const pz = a.angZ
+        a.angZ += (targetZ - a.angZ) * k
+        a.velZ = (a.angZ - pz) / Math.max(delta, 1e-3)
+        const pxv = a.angX
+        a.angX += (targetX - a.angX) * k
+        a.velX = (a.angX - pxv) / Math.max(delta, 1e-3)
+      } else if (
+        Math.abs(a.angZ) > 0.0005 || Math.abs(a.velZ) > 0.0005 ||
+        Math.abs(a.angX) > 0.0005 || Math.abs(a.velX) > 0.0005
+      ) {
         // caída de marioneta: gravedad de resorte con rebote amortiguado
-        a.vel += (-30 * a.angle - 3.4 * a.vel) * delta
-        a.angle += a.vel * delta
+        a.velZ += (-30 * a.angZ - 3.4 * a.velZ) * delta
+        a.angZ += a.velZ * delta
+        a.velX += (-30 * a.angX - 3.4 * a.velX) * delta
+        a.angX += a.velX * delta
       } else {
-        a.angle = 0
-        a.vel = 0
+        a.angZ = 0
+        a.velZ = 0
+        a.angX = 0
+        a.velX = 0
       }
     }
-    updateArm(pu.L, pu.shL, 1)
-    updateArm(pu.R, pu.shR, -1)
-    // las piernas suben hasta ~125° (más sería un split imposible)
-    updateArm(pu.LL, pu.hipL, 1, 2.2)
-    updateArm(pu.RL, pu.hipR, -1, 2.2)
+    updateLimb(pu.L, pu.shL, 1, 2.75, 2.1)
+    updateLimb(pu.R, pu.shR, -1, 2.75, 2.1)
+    // las piernas suben hasta ~125° y solo de lado (eje frontal sin probar)
+    updateLimb(pu.LL, pu.hipL, 1, 2.2, 0)
+    updateLimb(pu.RL, pu.hipR, -1, 2.2, 0)
     // brazos: se SUMA a lo que el hook ya aplicó este frame (corre antes)
-    rig.leftArm.rotation.z += pu.L.angle
-    rig.rightArm.rotation.z -= pu.R.angle
-    // el codo acompaña un poco: cuelga con naturalidad
-    rig.leftForearm.rotation.x += pu.L.angle * 0.12
-    rig.rightForearm.rotation.x += pu.R.angle * 0.12
+    // (rotación X negativa = hacia la cámara, verificado en render)
+    rig.leftArm.rotation.z += pu.L.angZ
+    rig.leftArm.rotation.x -= pu.L.angX
+    rig.rightArm.rotation.z -= pu.R.angZ
+    rig.rightArm.rotation.x -= pu.R.angX
+    // el codo acompaña: cuelga al alzar de lado y se estira al apuntar
+    rig.leftForearm.rotation.x += pu.L.angZ * 0.12 - pu.L.angX * 0.25
+    rig.rightForearm.rotation.x += pu.R.angZ * 0.12 - pu.R.angX * 0.25
     // piernas: el hook no las toca, se fija sobre la pose de reposo
     const restZ = (o: THREE.Object3D) =>
       (o.userData.restRot as { z: number } | undefined)?.z ?? 0
     const restX = (o: THREE.Object3D) =>
       (o.userData.restRot as { x: number } | undefined)?.x ?? 0
-    rig.leftThigh.rotation.z = restZ(rig.leftThigh) + pu.LL.angle
-    rig.rightThigh.rotation.z = restZ(rig.rightThigh) - pu.RL.angle
+    rig.leftThigh.rotation.z = restZ(rig.leftThigh) + pu.LL.angZ
+    rig.rightThigh.rotation.z = restZ(rig.rightThigh) - pu.RL.angZ
     // la rodilla cuelga doblándose levemente
-    rig.leftCalf.rotation.x = restX(rig.leftCalf) + pu.LL.angle * 0.15
-    rig.rightCalf.rotation.x = restX(rig.rightCalf) + pu.RL.angle * 0.15
+    rig.leftCalf.rotation.x = restX(rig.leftCalf) + pu.LL.angZ * 0.15
+    rig.rightCalf.rotation.x = restX(rig.rightCalf) + pu.RL.angZ * 0.15
   })
 
   return (
