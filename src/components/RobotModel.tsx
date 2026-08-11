@@ -196,6 +196,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
   const leftForearmRef = useRef<THREE.Object3D>(null!)
   const rightForearmRef = useRef<THREE.Object3D>(null!)
   const rightHandRef = useRef<THREE.Object3D>(null!)
+  const leftHandRef = useRef<THREE.Object3D>(null!)
   const antennaRef = useRef<THREE.Group>(null!)
   const flashRef = useRef<THREE.Mesh>(null!)
 
@@ -209,6 +210,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
   leftForearmRef.current = rig.leftForearm
   rightForearmRef.current = rig.rightForearm
   rightHandRef.current = rig.rightHand
+  leftHandRef.current = rig.leftHand
   antennaRef.current = rig.antenna
   flashRef.current = rig.flash
 
@@ -225,6 +227,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
       leftForearm: leftForearmRef,
       rightForearm: rightForearmRef,
       rightHand: rightHandRef,
+      leftHand: leftHandRef,
       antenna: antennaRef,
       screenFlash: flashRef,
     },

@@ -40,8 +40,9 @@ export interface RobotRefs {
   /** Antebrazos: codos para el saludo y balanceo natural */
   leftForearm?: RefObject<THREE.Object3D>
   rightForearm?: RefObject<THREE.Object3D>
-  /** Mano derecha: giro de "atornillado" en el saludo */
+  /** Manos: giro de "atornillado" y dedos que abren en el saludo */
   rightHand?: RefObject<THREE.Object3D>
+  leftHand?: RefObject<THREE.Object3D>
 }
 
 /** Rotación de reposo del hueso: las animaciones se SUMAN a esta base */
@@ -268,12 +269,14 @@ export function useRobotAnimation(
             // saluda AL FRENTE: brazo apuntando a la pantalla (rotación en
             // eje de mundo), la mano girando como atornillando y la
             // CABEZA mirando al frente (ignora el cursor mientras saluda)
+            // AMBOS brazos al frente
             qWaveRaise = env * 1.3
             qArmRZ = -env * 0.2
+            qArmLZ = env * 0.2
             const twist = Math.sin(p * Math.PI * 7) * env
             qForeRY = twist * 0.5
             qHandRY = twist * 0.6
-            // la mano ABRE y CIERRA los dedos al ritmo del saludo
+            // las manos ABREN y CIERRAN los dedos al ritmo del saludo
             qHandOpen = (0.5 + 0.5 * Math.sin(p * Math.PI * 7 + Math.PI / 2)) * env
             qHeadRoll = -env * 0.08
             qLookDamp = env
@@ -435,7 +438,7 @@ export function useRobotAnimation(
     if (leftForearm?.current) {
       const fr = restOf(leftForearm.current)
       leftForearm.current.rotation.x = fr.x + elbow - armSwing * 0.5
-      leftForearm.current.rotation.y = fr.y
+      leftForearm.current.rotation.y = fr.y + qForeRY // atornillado (saludo)
       leftForearm.current.rotation.z = fr.z
     }
     if (rightForearm?.current) {
@@ -444,18 +447,21 @@ export function useRobotAnimation(
       rightForearm.current.rotation.z = fr.z + qForeRZ
       rightForearm.current.rotation.y = fr.y + qForeRY // giro de atornillado
     }
-    if (refs.rightHand?.current) {
-      const hr2 = restOf(refs.rightHand.current)
-      refs.rightHand.current.rotation.y = hr2.y + qHandRY // muñeca atornillando
-      // dedos: la mano se ensancha (abierta) y contrae (puño) — el eje Y
-      // local corre a lo largo del brazo, X/Z son el ancho de la mano
-      refs.rightHand.current.scale.set(1 + qHandOpen * 0.4, 1 - qHandOpen * 0.08, 1 + qHandOpen * 0.4)
+    // manos: muñeca atornillando y dedos que abren/cierran (escala del
+    // hueso: X/Z son el ancho de la mano, Y corre a lo largo del brazo)
+    for (const mano of [refs.rightHand?.current, refs.leftHand?.current]) {
+      if (!mano) continue
+      const hr2 = restOf(mano)
+      mano.rotation.y = hr2.y + qHandRY
+      mano.scale.set(1 + qHandOpen * 0.4, 1 - qHandOpen * 0.08, 1 + qHandOpen * 0.4)
     }
-    // saludo frontal: alza el brazo hacia la cámara girando en eje de
-    // mundo (independiente de la pose local del hueso)
-    if (qWaveRaise > 0 && rightArm.current) {
-      girarEnEjeMundo(rightArm.current, EJE_X, -qWaveRaise)
+    // saludo frontal: alza AMBOS brazos hacia la cámara girando en eje
+    // de mundo (independiente de la pose local de cada hueso)
+    if (qWaveRaise > 0) {
+      if (rightArm.current) girarEnEjeMundo(rightArm.current, EJE_X, -qWaveRaise)
       if (rightForearm?.current) girarEnEjeMundo(rightForearm.current, EJE_X, -qWaveRaise * 0.3)
+      if (leftArm.current) girarEnEjeMundo(leftArm.current, EJE_X, -qWaveRaise)
+      if (leftForearm?.current) girarEnEjeMundo(leftForearm.current, EJE_X, -qWaveRaise * 0.3)
     }
     if (antenna.current) {
       // la antena oscila y además reacciona al giro de la cabeza
