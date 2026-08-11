@@ -5,6 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { useRobotAnimation } from '../hooks/useRobotAnimation'
 import type { FocusTarget, RobotAction, QuirkName } from '../hooks/useRobotAnimation'
+import { girarEnEjeMundo, EJE_X } from '../lib/boneUtils'
 import type { MouseState } from '../hooks/useMouseTracking'
 
 interface RobotModelProps {
@@ -89,11 +90,22 @@ function buildRig(scene: THREE.Group): Rig {
   const leftFoot = boneOrEmpty('L_Foot')
   const rightFoot = boneOrEmpty('R_Foot')
   // el hook anima SUMANDO a la rotación de reposo de cada hueso
-  ;[head, spine, leftArm, rightArm, leftForearm, rightForearm, leftThigh, rightThigh, leftCalf, rightCalf].forEach(
-    (b) => {
-      b.userData.restRot = { x: b.rotation.x, y: b.rotation.y, z: b.rotation.z }
-    },
-  )
+  ;[
+    head,
+    spine,
+    leftArm,
+    rightArm,
+    leftForearm,
+    rightForearm,
+    leftHand,
+    rightHand,
+    leftThigh,
+    rightThigh,
+    leftCalf,
+    rightCalf,
+  ].forEach((b) => {
+    b.userData.restRot = { x: b.rotation.x, y: b.rotation.y, z: b.rotation.z }
+  })
 
   // ---- mallas (cuerpo y ojos, ambas con el mismo skin) ----
   let bodySkin: THREE.Mesh | null = null
@@ -183,6 +195,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
   const rightArmRef = useRef<THREE.Object3D>(null!)
   const leftForearmRef = useRef<THREE.Object3D>(null!)
   const rightForearmRef = useRef<THREE.Object3D>(null!)
+  const rightHandRef = useRef<THREE.Object3D>(null!)
   const antennaRef = useRef<THREE.Group>(null!)
   const flashRef = useRef<THREE.Mesh>(null!)
 
@@ -195,6 +208,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
   rightArmRef.current = rig.rightArm
   leftForearmRef.current = rig.leftForearm
   rightForearmRef.current = rig.rightForearm
+  rightHandRef.current = rig.rightHand
   antennaRef.current = rig.antenna
   flashRef.current = rig.flash
 
@@ -210,6 +224,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
       rightArm: rightArmRef,
       leftForearm: leftForearmRef,
       rightForearm: rightForearmRef,
+      rightHand: rightHandRef,
       antenna: antennaRef,
       screenFlash: flashRef,
     },
@@ -388,15 +403,21 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
     updateLimb(pu.LL, pu.hipL, 1, 2.2, 0)
     updateLimb(pu.RL, pu.hipR, -1, 2.2, 0)
     // brazos: se SUMA a lo que el hook ya aplicó este frame (corre antes)
-    // (rotación X POSITIVA = hacia la cámara, corregido en vivo)
     rig.leftArm.rotation.z += pu.L.angZ
-    rig.leftArm.rotation.x += pu.L.angX
     rig.rightArm.rotation.z -= pu.R.angZ
-    rig.rightArm.rotation.x += pu.R.angX
-    // el codo DOBLA para completar el alcance: hombro + codo ≈ 90° y el
-    // antebrazo queda horizontal apuntando a la cámara
-    rig.leftForearm.rotation.x += pu.L.angZ * 0.12 + pu.L.angX * 0.45
-    rig.rightForearm.rotation.x += pu.R.angZ * 0.12 + pu.R.angX * 0.45
+    // el codo acompaña la elevación lateral
+    rig.leftForearm.rotation.x += pu.L.angZ * 0.12
+    rig.rightForearm.rotation.x += pu.R.angZ * 0.12
+    // alcance FRONTAL: giro en eje de mundo (consistente en ambos brazos);
+    // el codo dobla para que el antebrazo apunte a la cámara
+    if (pu.L.angX > 0.001) {
+      girarEnEjeMundo(rig.leftArm, EJE_X, -pu.L.angX)
+      girarEnEjeMundo(rig.leftForearm, EJE_X, -pu.L.angX * 0.45)
+    }
+    if (pu.R.angX > 0.001) {
+      girarEnEjeMundo(rig.rightArm, EJE_X, -pu.R.angX)
+      girarEnEjeMundo(rig.rightForearm, EJE_X, -pu.R.angX * 0.45)
+    }
     // piernas: el hook no las toca, se fija sobre la pose de reposo
     const restZ = (o: THREE.Object3D) =>
       (o.userData.restRot as { z: number } | undefined)?.z ?? 0

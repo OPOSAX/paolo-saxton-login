@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
+import { girarEnEjeMundo, EJE_X } from '../lib/boneUtils'
 import type { MouseState } from './useMouseTracking'
 
 /** Campo del formulario que puede tener el foco */
@@ -39,6 +40,8 @@ export interface RobotRefs {
   /** Antebrazos: codos para el saludo y balanceo natural */
   leftForearm?: RefObject<THREE.Object3D>
   rightForearm?: RefObject<THREE.Object3D>
+  /** Mano derecha: giro de "atornillado" en el saludo */
+  rightHand?: RefObject<THREE.Object3D>
 }
 
 /** Rotación de reposo del hueso: las animaciones se SUMAN a esta base */
@@ -211,8 +214,11 @@ export function useRobotAnimation(
     let qArmRZ = 0
     let qForeRX = 0
     let qForeRZ = 0
+    let qForeRY = 0
+    let qHandRY = 0
     let qSpineX = 0
     let qBodyRotX = 0
+    let qWaveRaise = 0 // alza del brazo HACIA LA CÁMARA (eje de mundo)
     if (!reducedMotion) {
       // gesto pedido desde la interfaz: arranca de inmediato
       if (quirkRef?.current) {
@@ -257,11 +263,14 @@ export function useRobotAnimation(
             qArmLX = Math.sin(p * Math.PI * 6) * 0.3 * env
             qArmRX = -Math.sin(p * Math.PI * 6) * 0.3 * env
           } else if (st.quirk === 'wave') {
-            // saluda: brazo derecho bien en alto y el antebrazo ondeando
-            // SIEMPRE hacia el lado natural (nunca dobla el codo al revés)
-            qArmRZ = -env * 2.3
-            qForeRZ = (0.55 + Math.sin(p * Math.PI * 6) * 0.35) * env
-            qHeadRoll = -env * 0.12
+            // saluda AL FRENTE: brazo apuntando a la pantalla (rotación en
+            // eje de mundo) y la mano girando como atornillando
+            qWaveRaise = env * 1.3
+            qArmRZ = -env * 0.2
+            const twist = Math.sin(p * Math.PI * 7) * env
+            qForeRY = twist * 0.5
+            qHandRY = twist * 0.6
+            qHeadRoll = -env * 0.08
           } else if (st.quirk === 'laugh') {
             // carcajada: el cuerpo rebota y la cabeza se echa atrás
             qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.03 * env
@@ -416,7 +425,18 @@ export function useRobotAnimation(
     if (rightForearm?.current) {
       const fr = restOf(rightForearm.current)
       rightForearm.current.rotation.x = fr.x + elbow + armSwing * 0.5 + qForeRX
-      rightForearm.current.rotation.z = fr.z + qForeRZ // ondeo del saludo
+      rightForearm.current.rotation.z = fr.z + qForeRZ
+      rightForearm.current.rotation.y = fr.y + qForeRY // giro de atornillado
+    }
+    if (refs.rightHand?.current) {
+      const hr2 = restOf(refs.rightHand.current)
+      refs.rightHand.current.rotation.y = hr2.y + qHandRY // muñeca atornillando
+    }
+    // saludo frontal: alza el brazo hacia la cámara girando en eje de
+    // mundo (independiente de la pose local del hueso)
+    if (qWaveRaise > 0 && rightArm.current) {
+      girarEnEjeMundo(rightArm.current, EJE_X, -qWaveRaise)
+      if (rightForearm?.current) girarEnEjeMundo(rightForearm.current, EJE_X, -qWaveRaise * 0.3)
     }
     if (antenna.current) {
       // la antena oscila y además reacciona al giro de la cabeza
