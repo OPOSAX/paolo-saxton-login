@@ -14,6 +14,7 @@ interface RobotModelProps {
   actionRef: MutableRefObject<RobotAction | null>
   reducedMotion: boolean
   quirkRef?: MutableRefObject<QuirkName | null>
+  followRef?: MutableRefObject<boolean>
 }
 
 /**
@@ -181,7 +182,14 @@ function buildRig(scene: THREE.Group): Rig {
   }
 }
 
-export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, quirkRef }: RobotModelProps) {
+export default function RobotModel({
+  mouse,
+  focusRef,
+  actionRef,
+  reducedMotion,
+  quirkRef,
+  followRef,
+}: RobotModelProps) {
   const gltf = useGLTF(MODEL_URL)
   const rig = useMemo(() => buildRig(gltf.scene), [gltf.scene])
 
@@ -236,6 +244,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, 
     actionRef,
     reducedMotion,
     quirkRef,
+    followRef,
   )
 
   /*

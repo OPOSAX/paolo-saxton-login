@@ -25,6 +25,11 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const focusRef = useRef<FocusTarget>(null)
   const actionRef = useRef<RobotAction | null>(null)
   const quirkRef = useRef<QuirkName | null>(null)
+  // el seguimiento del mouse parte APAGADO y se alterna con un clic
+  const [seguirMouse, setSeguirMouse] = useState(false)
+  const followRef = useRef(false)
+  followRef.current = seguirMouse
+  const clickInicio = useRef<{ x: number; y: number } | null>(null)
   const [reducedMotion, setReducedMotion] = useState(false)
 
   // Respeta prefers-reduced-motion
@@ -59,7 +64,21 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   }
 
   return (
-    <main className="login-page">
+    <main
+      className="login-page"
+      onPointerDown={(e) => {
+        clickInicio.current = { x: e.clientX, y: e.clientY }
+      }}
+      onClick={(e) => {
+        // un CLIC en zona libre alterna el seguimiento del mouse
+        // (se ignoran botones, formulario y los arrastres de marioneta)
+        const t = e.target as HTMLElement
+        if (t.closest('button, input, a, label, .login-card')) return
+        const d = clickInicio.current
+        if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return
+        setSeguirMouse((v) => !v)
+      }}
+    >
       <section className="robot-side" aria-hidden="true">
         <RobotScene
           mouse={mouse}
@@ -67,6 +86,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           actionRef={actionRef}
           reducedMotion={reducedMotion}
           quirkRef={quirkRef}
+          followRef={followRef}
         />
       </section>
       {/* panel de animaciones seleccionables */}
@@ -81,6 +101,29 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           zIndex: 10,
         }}
       >
+        <button
+          type="button"
+          onClick={() => setSeguirMouse((v) => !v)}
+          title="También puedes hacer clic en cualquier zona libre de la página"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: seguirMouse ? 'rgba(79,140,255,0.28)' : 'rgba(255,255,255,0.07)',
+            border: `1px solid ${seguirMouse ? 'rgba(79,140,255,0.7)' : 'rgba(255,255,255,0.14)'}`,
+            backdropFilter: 'blur(10px)',
+            color: '#f0f4fc',
+            font: 'inherit',
+            fontSize: 14,
+            fontWeight: 700,
+            padding: '7px 13px 7px 9px',
+            borderRadius: 10,
+            cursor: 'pointer',
+            marginBottom: 4,
+          }}
+        >
+          <span style={{ fontSize: 17 }}>🖱️</span> Seguir mouse: {seguirMouse ? 'Sí' : 'No'}
+        </button>
         {ANIMACIONES.map((a) => (
           <button
             key={a.q}

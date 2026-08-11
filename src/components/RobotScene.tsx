@@ -11,6 +11,7 @@ interface RobotSceneProps {
   actionRef: MutableRefObject<RobotAction | null>
   reducedMotion: boolean
   quirkRef?: MutableRefObject<QuirkName | null>
+  followRef?: MutableRefObject<boolean>
 }
 
 function isWebGLAvailable(): boolean {
@@ -25,7 +26,14 @@ function isWebGLAvailable(): boolean {
   }
 }
 
-export default function RobotScene({ mouse, focusRef, actionRef, reducedMotion, quirkRef }: RobotSceneProps) {
+export default function RobotScene({
+  mouse,
+  focusRef,
+  actionRef,
+  reducedMotion,
+  quirkRef,
+  followRef,
+}: RobotSceneProps) {
   const [webgl] = useState<boolean>(() => isWebGLAvailable())
   const [frameloop, setFrameloop] = useState<'always' | 'never'>('always')
 
@@ -69,6 +77,7 @@ export default function RobotScene({ mouse, focusRef, actionRef, reducedMotion, 
           actionRef={actionRef}
           reducedMotion={reducedMotion}
           quirkRef={quirkRef}
+          followRef={followRef}
         />
       </Suspense>
     </Canvas>

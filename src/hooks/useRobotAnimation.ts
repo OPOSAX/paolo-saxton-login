@@ -103,6 +103,8 @@ export function useRobotAnimation(
   reducedMotion: boolean,
   /** Gesto solicitado desde la interfaz (se consume y se limpia) */
   quirkRef?: MutableRefObject<QuirkName | null>,
+  /** Si es false, la cabeza NO sigue al mouse (se activa con clic) */
+  followRef?: MutableRefObject<boolean>,
 ) {
   // Estado suavizado entre frames (no provoca renders)
   const s = useRef({
@@ -143,11 +145,11 @@ export function useRobotAnimation(
       py = focus.py
       if (focus.field === 'email') tiltTarget = 0.08 // curiosidad leve
       else if (focus.field === 'password') tiltTarget = -0.05
-    } else if (mouse.current.inside) {
+    } else if (mouse.current.inside && (followRef?.current ?? true)) {
       px = mouse.current.px
       py = mouse.current.py
     }
-    // si el mouse salió de la ventana y no hay foco: vuelve al centro
+    // sin seguimiento activo (o mouse fuera) y sin foco: mira al centro
 
     if (px !== null && refs.head.current) {
       const camera = state.camera
@@ -242,6 +244,9 @@ export function useRobotAnimation(
           st.nextQuirk = t + QUIRK_MIN_GAP + Math.random() * (QUIRK_MAX_GAP - QUIRK_MIN_GAP)
         } else {
           const env = Math.sin(Math.PI * p) // entra y sale suave
+          // durante cualquier gesto la cabeza deja de seguir al cursor:
+          // las animaciones se ven limpias
+          qLookDamp = env
           if (st.quirk === 'spin') {
             // vuelta completa con los BRAZOS EN ALTO y un brinquito
             const e = p * p * (3 - 2 * p) // easing suave, termina en 360°
