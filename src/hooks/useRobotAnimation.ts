@@ -219,6 +219,7 @@ export function useRobotAnimation(
     let qSpineX = 0
     let qBodyRotX = 0
     let qWaveRaise = 0 // alza del brazo HACIA LA CÁMARA (eje de mundo)
+    let qLookDamp = 0 // 1 = ignora el cursor y mira al frente (saludo)
     if (!reducedMotion) {
       // gesto pedido desde la interfaz: arranca de inmediato
       if (quirkRef?.current) {
@@ -264,13 +265,15 @@ export function useRobotAnimation(
             qArmRX = -Math.sin(p * Math.PI * 6) * 0.3 * env
           } else if (st.quirk === 'wave') {
             // saluda AL FRENTE: brazo apuntando a la pantalla (rotación en
-            // eje de mundo) y la mano girando como atornillando
+            // eje de mundo), la mano girando como atornillando y la
+            // CABEZA mirando al frente (ignora el cursor mientras saluda)
             qWaveRaise = env * 1.3
             qArmRZ = -env * 0.2
             const twist = Math.sin(p * Math.PI * 7) * env
             qForeRY = twist * 0.5
             qHandRY = twist * 0.6
             qHeadRoll = -env * 0.08
+            qLookDamp = env
           } else if (st.quirk === 'laugh') {
             // carcajada: el cuerpo rebota y la cabeza se echa atrás
             qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.03 * env
@@ -360,17 +363,20 @@ export function useRobotAnimation(
     const { head, eyes, pupils, body, leftArm, rightArm, antenna, screenFlash, eyelids } = refs
     const { spine, leftForearm, rightForearm } = refs
 
+    // durante el saludo la cabeza mira al frente (amortigua el cursor)
+    const efYaw = st.yaw * (1 - qLookDamp)
+    const efPitch = st.pitch * (1 - qLookDamp)
     if (head.current) {
       const hr = restOf(head.current)
-      head.current.rotation.y = hr.y + st.yaw + actYaw + qHeadYaw
-      head.current.rotation.x = hr.x + st.pitch + actPitch + idleHeadPitch + qHeadPitch
+      head.current.rotation.y = hr.y + efYaw + actYaw + qHeadYaw
+      head.current.rotation.x = hr.x + efPitch + actPitch + idleHeadPitch + qHeadPitch
       head.current.rotation.z = hr.z + st.tilt + idleTilt + qHeadRoll
     }
     // el torso acompaña una fracción del giro: seguimiento más corporal
     if (spine?.current) {
       const sr = restOf(spine.current)
-      spine.current.rotation.y = sr.y + st.yaw * SPINE_FOLLOW
-      spine.current.rotation.x = sr.x + st.pitch * SPINE_FOLLOW * 0.5 + qSpineX
+      spine.current.rotation.y = sr.y + efYaw * SPINE_FOLLOW
+      spine.current.rotation.x = sr.x + efPitch * SPINE_FOLLOW * 0.5 + qSpineX
       spine.current.rotation.z = sr.z + st.tilt * 0.4
     }
     const openness = blinkScale * st.lid // 1 = ojo abierto, 0 = cerrado
@@ -406,14 +412,19 @@ export function useRobotAnimation(
     const armFlap = reducedMotion
       ? 0
       : ARM_FLAP_BASE + (Math.sin(t * ARM_SPEED + 0.9) * 0.5 + 0.5) * ARM_FLAP
+    // IMPORTANTE: se restablecen los TRES ejes cada frame — las
+    // rotaciones por cuaternión (saludo/marioneta) dejan residuos en el
+    // euler del hueso que de otro modo se acumulan
     if (leftArm.current) {
       const lr = restOf(leftArm.current)
       leftArm.current.rotation.x = lr.x + armSwing + qArmLX
+      leftArm.current.rotation.y = lr.y
       leftArm.current.rotation.z = lr.z - armFlap + qArmLZ
     }
     if (rightArm.current) {
       const rr = restOf(rightArm.current)
       rightArm.current.rotation.x = rr.x - armSwing + qArmRX
+      rightArm.current.rotation.y = rr.y
       rightArm.current.rotation.z = rr.z + armFlap + qArmRZ
     }
     // antebrazos: leve flexión de codo en contrafase (brazos más vivos)
@@ -421,6 +432,8 @@ export function useRobotAnimation(
     if (leftForearm?.current) {
       const fr = restOf(leftForearm.current)
       leftForearm.current.rotation.x = fr.x + elbow - armSwing * 0.5
+      leftForearm.current.rotation.y = fr.y
+      leftForearm.current.rotation.z = fr.z
     }
     if (rightForearm?.current) {
       const fr = restOf(rightForearm.current)
