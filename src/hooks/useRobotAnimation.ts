@@ -64,14 +64,15 @@ const ARM_FLAP = 0.065 // amplitud del aleteo lateral
 
 /*
  * Gestos divertidos aleatorios durante la espera:
- *  - spin:   da una vuelta completa sobre sí mismo
+ *  - spin:   da una vuelta completa sobre sí mismo con brazos en alto
  *  - hop:    da dos saltitos con los brazos abiertos
  *  - shimmy: bailecito girando el cuerpo con brazos alternados
- *  - peek:   mira curioso a un lado y al otro
- *  - wave:   saluda con el brazo derecho (boca entreabierta, dice hola)
- *  - laugh:  se ríe: la boca traquetea y el cuerpo rebota
+ *  - wave:   saluda: brazo en alto y antebrazo ondeando de lado a lado
+ *  - laugh:  carcajada: el cuerpo rebota y la cabeza se echa atrás
+ *  - duck:   se agacha: reverencia doblando el torso
+ *  - fall:   se cae de lado, rebota en el piso y se vuelve a parar
  */
-const QUIRKS = ['spin', 'hop', 'shimmy', 'peek', 'wave', 'laugh'] as const
+const QUIRKS = ['spin', 'hop', 'shimmy', 'wave', 'laugh', 'duck', 'fall'] as const
 type Quirk = (typeof QUIRKS)[number]
 /** Nombre de gesto que puede dispararse desde la interfaz */
 export type QuirkName = Quirk
@@ -79,9 +80,10 @@ const QUIRK_DURATION: Record<Quirk, number> = {
   spin: 1.7,
   hop: 1.4,
   shimmy: 1.6,
-  peek: 2.4,
-  wave: 2.0,
+  wave: 2.2,
   laugh: 1.8,
+  duck: 1.7,
+  fall: 2.8,
 }
 const QUIRK_MIN_GAP = 6 // segundos mínimos entre gestos
 const QUIRK_MAX_GAP = 14
@@ -208,6 +210,9 @@ export function useRobotAnimation(
     let qArmRX = 0
     let qArmRZ = 0
     let qForeRX = 0
+    let qForeRZ = 0
+    let qSpineX = 0
+    let qBodyRotX = 0
     if (!reducedMotion) {
       // gesto pedido desde la interfaz: arranca de inmediato
       if (quirkRef?.current) {
@@ -251,23 +256,49 @@ export function useRobotAnimation(
             qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.025 * env
             qArmLX = Math.sin(p * Math.PI * 6) * 0.3 * env
             qArmRX = -Math.sin(p * Math.PI * 6) * 0.3 * env
-          } else if (st.quirk === 'peek') {
-            // mira curioso a un lado y al otro
-            qHeadYaw = Math.sin(p * Math.PI * 2) * 0.38 * env
-            qBodyRotY = Math.sin(p * Math.PI * 2) * 0.08 * env
-            qHeadPitch = env * 0.05
           } else if (st.quirk === 'wave') {
-            // saluda: brazo derecho en alto y el ANTEBRAZO se agita
-            // (codo de verdad)
-            qArmRZ = -env * 1.7
-            qForeRX = (0.5 + Math.sin(p * Math.PI * 7) * 0.45) * env
-            qHeadRoll = -env * 0.1
+            // saluda: brazo derecho bien en alto, codo algo doblado hacia
+            // adelante y el antebrazo ONDEANDO de lado a lado
+            qArmRZ = -env * 2.3
+            qForeRX = env * 0.35
+            qForeRZ = Math.sin(p * Math.PI * 6) * 0.55 * env
+            qHeadRoll = -env * 0.12
           } else if (st.quirk === 'laugh') {
             // carcajada: el cuerpo rebota y la cabeza se echa atrás
             qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.03 * env
             qHeadPitch = env * 0.16
             qArmLZ = env * 0.25
             qArmRZ = -env * 0.25
+          } else if (st.quirk === 'duck') {
+            // se agacha: reverencia profunda doblando el torso, cabeza
+            // abajo y brazos ligeramente atrás
+            qSpineX = -env * 0.85
+            qHeadPitch = -env * 0.4
+            qArmLZ = env * 0.3
+            qArmRZ = -env * 0.3
+          } else if (st.quirk === 'fall') {
+            // se cae DE ESPALDAS girando sobre los pies (hacia el fondo,
+            // así queda entero en cámara), rebota, queda tendido y se
+            // vuelve a parar
+            const caida = 1.45
+            let ang
+            if (p < 0.26) {
+              const q = p / 0.26
+              ang = caida * q * q // acelera al caer
+            } else if (p < 0.36) {
+              ang = caida - Math.sin(((p - 0.26) / 0.1) * Math.PI) * 0.14 // rebote
+            } else if (p < 0.6) {
+              ang = caida // tendido en el piso
+            } else {
+              const q = (p - 0.6) / 0.4
+              ang = caida * (1 - q * q * (3 - 2 * q)) // se incorpora suave
+            }
+            qBodyRotX = -ang
+            // manotea mientras cae
+            const flail = p < 0.36 ? Math.sin(p * Math.PI * 9) * 0.5 : 0
+            qArmLZ = flail + ang * 0.45
+            qArmRZ = -flail - ang * 0.45
+            qHeadPitch = ang * 0.3 // intenta levantar la cabeza
           }
         }
       }
@@ -331,7 +362,7 @@ export function useRobotAnimation(
     if (spine?.current) {
       const sr = restOf(spine.current)
       spine.current.rotation.y = sr.y + st.yaw * SPINE_FOLLOW
-      spine.current.rotation.x = sr.x + st.pitch * SPINE_FOLLOW * 0.5
+      spine.current.rotation.x = sr.x + st.pitch * SPINE_FOLLOW * 0.5 + qSpineX
       spine.current.rotation.z = sr.z + st.tilt * 0.4
     }
     const openness = blinkScale * st.lid // 1 = ojo abierto, 0 = cerrado
@@ -360,6 +391,7 @@ export function useRobotAnimation(
     if (body.current) {
       body.current.position.y = idleBob + qBodyY
       body.current.rotation.y = qBodyRotY
+      body.current.rotation.x = qBodyRotX // caída de espaldas sobre los pies
     }
     // balanceo de brazos: péndulo alternado + aleteo lateral visible de frente
     const armSwing = reducedMotion ? 0 : Math.sin(t * ARM_SPEED) * ARM_SWING
@@ -385,6 +417,7 @@ export function useRobotAnimation(
     if (rightForearm?.current) {
       const fr = restOf(rightForearm.current)
       rightForearm.current.rotation.x = fr.x + elbow + armSwing * 0.5 + qForeRX
+      rightForearm.current.rotation.z = fr.z + qForeRZ // ondeo del saludo
     }
     if (antenna.current) {
       // la antena oscila y además reacciona al giro de la cabeza

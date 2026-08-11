@@ -11,7 +11,8 @@ const ANIMACIONES: Array<{ q: QuirkName; icono: string; nombre: string }> = [
   { q: 'spin', icono: '🔄', nombre: 'Vuelta' },
   { q: 'hop', icono: '🦘', nombre: 'Saltar' },
   { q: 'shimmy', icono: '🕺', nombre: 'Bailar' },
-  { q: 'peek', icono: '👀', nombre: 'Curioso' },
+  { q: 'duck', icono: '🙇', nombre: 'Agacharse' },
+  { q: 'fall', icono: '😵', nombre: 'Caerse' },
 ]
 
 interface LoginPageProps {
