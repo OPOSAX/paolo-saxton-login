@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { useRobotAnimation } from '../hooks/useRobotAnimation'
-import type { FocusTarget, RobotAction } from '../hooks/useRobotAnimation'
+import type { FocusTarget, RobotAction, QuirkName } from '../hooks/useRobotAnimation'
 import type { MouseState } from '../hooks/useMouseTracking'
 
 interface RobotModelProps {
@@ -12,6 +12,7 @@ interface RobotModelProps {
   focusRef: MutableRefObject<FocusTarget>
   actionRef: MutableRefObject<RobotAction | null>
   reducedMotion: boolean
+  quirkRef?: MutableRefObject<QuirkName | null>
 }
 
 /**
@@ -168,7 +169,7 @@ function buildRig(scene: THREE.Group): Rig {
   }
 }
 
-export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }: RobotModelProps) {
+export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion, quirkRef }: RobotModelProps) {
   const gltf = useGLTF(MODEL_URL)
   const rig = useMemo(() => buildRig(gltf.scene), [gltf.scene])
 
@@ -216,6 +217,7 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }
     focusRef,
     actionRef,
     reducedMotion,
+    quirkRef,
   )
 
   /*
@@ -378,8 +380,10 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }
         a.velX = 0
       }
     }
-    updateLimb(pu.L, pu.shL, 1, 2.75, 2.1)
-    updateLimb(pu.R, pu.shR, -1, 2.75, 2.1)
+    // frontal: hombro hasta ~63°; el codo completa el resto para que el
+    // antebrazo quede totalmente hacia adelante
+    updateLimb(pu.L, pu.shL, 1, 2.75, 1.1)
+    updateLimb(pu.R, pu.shR, -1, 2.75, 1.1)
     // las piernas suben hasta ~125° y solo de lado (eje frontal sin probar)
     updateLimb(pu.LL, pu.hipL, 1, 2.2, 0)
     updateLimb(pu.RL, pu.hipR, -1, 2.2, 0)
@@ -389,9 +393,10 @@ export default function RobotModel({ mouse, focusRef, actionRef, reducedMotion }
     rig.leftArm.rotation.x += pu.L.angX
     rig.rightArm.rotation.z -= pu.R.angZ
     rig.rightArm.rotation.x += pu.R.angX
-    // el codo acompaña: cuelga al alzar de lado y se estira al apuntar
-    rig.leftForearm.rotation.x += pu.L.angZ * 0.12 + pu.L.angX * 0.25
-    rig.rightForearm.rotation.x += pu.R.angZ * 0.12 + pu.R.angX * 0.25
+    // el codo DOBLA para completar el alcance: hombro + codo ≈ 90° y el
+    // antebrazo queda horizontal apuntando a la cámara
+    rig.leftForearm.rotation.x += pu.L.angZ * 0.12 + pu.L.angX * 0.45
+    rig.rightForearm.rotation.x += pu.R.angZ * 0.12 + pu.R.angX * 0.45
     // piernas: el hook no las toca, se fija sobre la pose de reposo
     const restZ = (o: THREE.Object3D) =>
       (o.userData.restRot as { z: number } | undefined)?.z ?? 0

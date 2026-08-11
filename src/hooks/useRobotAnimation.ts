@@ -73,6 +73,8 @@ const ARM_FLAP = 0.065 // amplitud del aleteo lateral
  */
 const QUIRKS = ['spin', 'hop', 'shimmy', 'peek', 'wave', 'laugh'] as const
 type Quirk = (typeof QUIRKS)[number]
+/** Nombre de gesto que puede dispararse desde la interfaz */
+export type QuirkName = Quirk
 const QUIRK_DURATION: Record<Quirk, number> = {
   spin: 1.7,
   hop: 1.4,
@@ -93,6 +95,8 @@ export function useRobotAnimation(
   focusRef: MutableRefObject<FocusTarget>,
   actionRef: MutableRefObject<RobotAction | null>,
   reducedMotion: boolean,
+  /** Gesto solicitado desde la interfaz (se consume y se limpia) */
+  quirkRef?: MutableRefObject<QuirkName | null>,
 ) {
   // Estado suavizado entre frames (no provoca renders)
   const s = useRef({
@@ -205,6 +209,12 @@ export function useRobotAnimation(
     let qArmRZ = 0
     let qForeRX = 0
     if (!reducedMotion) {
+      // gesto pedido desde la interfaz: arranca de inmediato
+      if (quirkRef?.current) {
+        st.quirk = quirkRef.current
+        st.quirkStart = t
+        quirkRef.current = null
+      }
       // solo arranca un gesto si el robot está tranquilo (sin foco ni gesto de login)
       if (!st.quirk && !action && !focus && t >= st.nextQuirk) {
         st.quirk = QUIRKS[Math.floor(Math.random() * QUIRKS.length)]

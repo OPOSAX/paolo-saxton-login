@@ -2,7 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import RobotScene from '../components/RobotScene'
 import LoginForm from '../components/LoginForm'
 import { useMouseTracking } from '../hooks/useMouseTracking'
-import type { FocusField, FocusTarget, RobotAction } from '../hooks/useRobotAnimation'
+import type { FocusField, FocusTarget, QuirkName, RobotAction } from '../hooks/useRobotAnimation'
+
+/** Animaciones que se pueden lanzar desde el panel lateral */
+const ANIMACIONES: Array<{ q: QuirkName; icono: string; nombre: string }> = [
+  { q: 'wave', icono: '👋', nombre: 'Saludar' },
+  { q: 'laugh', icono: '😂', nombre: 'Reír' },
+  { q: 'spin', icono: '🔄', nombre: 'Vuelta' },
+  { q: 'hop', icono: '🦘', nombre: 'Saltar' },
+  { q: 'shimmy', icono: '🕺', nombre: 'Bailar' },
+  { q: 'peek', icono: '👀', nombre: 'Curioso' },
+]
 
 interface LoginPageProps {
   /** Se llama tras un inicio de sesión exitoso (deja tiempo al gesto del robot) */
@@ -13,6 +23,7 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   const mouse = useMouseTracking()
   const focusRef = useRef<FocusTarget>(null)
   const actionRef = useRef<RobotAction | null>(null)
+  const quirkRef = useRef<QuirkName | null>(null)
   const [reducedMotion, setReducedMotion] = useState(false)
 
   // Respeta prefers-reduced-motion
@@ -54,8 +65,49 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
           focusRef={focusRef}
           actionRef={actionRef}
           reducedMotion={reducedMotion}
+          quirkRef={quirkRef}
         />
       </section>
+      {/* panel de animaciones seleccionables */}
+      <div
+        style={{
+          position: 'fixed',
+          left: 16,
+          bottom: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 7,
+          zIndex: 10,
+        }}
+      >
+        {ANIMACIONES.map((a) => (
+          <button
+            key={a.q}
+            type="button"
+            onClick={() => {
+              quirkRef.current = a.q
+            }}
+            title={a.nombre}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.14)',
+              backdropFilter: 'blur(10px)',
+              color: '#f0f4fc',
+              font: 'inherit',
+              fontSize: 14,
+              fontWeight: 600,
+              padding: '7px 13px 7px 9px',
+              borderRadius: 10,
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ fontSize: 17 }}>{a.icono}</span> {a.nombre}
+          </button>
+        ))}
+      </div>
       <section className="form-side">
         <LoginForm onFocusChange={handleFocusChange} onSubmitResult={handleSubmitResult} />
       </section>

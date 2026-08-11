@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { Canvas } from '@react-three/fiber'
 import RobotModel from './RobotModel'
-import type { FocusTarget, RobotAction } from '../hooks/useRobotAnimation'
+import type { FocusTarget, RobotAction, QuirkName } from '../hooks/useRobotAnimation'
 import type { MouseState } from '../hooks/useMouseTracking'
 
 interface RobotSceneProps {
@@ -10,6 +10,7 @@ interface RobotSceneProps {
   focusRef: MutableRefObject<FocusTarget>
   actionRef: MutableRefObject<RobotAction | null>
   reducedMotion: boolean
+  quirkRef?: MutableRefObject<QuirkName | null>
 }
 
 function isWebGLAvailable(): boolean {
@@ -24,7 +25,7 @@ function isWebGLAvailable(): boolean {
   }
 }
 
-export default function RobotScene({ mouse, focusRef, actionRef, reducedMotion }: RobotSceneProps) {
+export default function RobotScene({ mouse, focusRef, actionRef, reducedMotion, quirkRef }: RobotSceneProps) {
   const [webgl] = useState<boolean>(() => isWebGLAvailable())
   const [frameloop, setFrameloop] = useState<'always' | 'never'>('always')
 
@@ -67,6 +68,7 @@ export default function RobotScene({ mouse, focusRef, actionRef, reducedMotion }
           focusRef={focusRef}
           actionRef={actionRef}
           reducedMotion={reducedMotion}
+          quirkRef={quirkRef}
         />
       </Suspense>
     </Canvas>
