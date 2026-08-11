@@ -257,11 +257,10 @@ export function useRobotAnimation(
             qArmLX = Math.sin(p * Math.PI * 6) * 0.3 * env
             qArmRX = -Math.sin(p * Math.PI * 6) * 0.3 * env
           } else if (st.quirk === 'wave') {
-            // saluda: brazo derecho bien en alto, codo algo doblado hacia
-            // adelante y el antebrazo ONDEANDO de lado a lado
+            // saluda: brazo derecho bien en alto y el antebrazo ondeando
+            // SIEMPRE hacia el lado natural (nunca dobla el codo al revés)
             qArmRZ = -env * 2.3
-            qForeRX = env * 0.35
-            qForeRZ = Math.sin(p * Math.PI * 6) * 0.55 * env
+            qForeRZ = (0.55 + Math.sin(p * Math.PI * 6) * 0.35) * env
             qHeadRoll = -env * 0.12
           } else if (st.quirk === 'laugh') {
             // carcajada: el cuerpo rebota y la cabeza se echa atrás

@@ -94,11 +94,12 @@ const lThighRest = rest(lThigh)
 const rThighRest = rest(rThigh)
 // poses de los gestos nuevos: caída (bob z=1.35) / agachado (spine -0.6)
 // / saludo (brazo -2.3 + antebrazo ondeando) / reposo
+// saludo: ¿hacia qué lado dobla el codo naturalmente (mano a la cabeza)?
 const views = [
-  { bobX: -1.45, spineX: 0, headX: 0.4, armZ: 0, foreX: 0, foreZ: 0 },
-  { bobX: 0, spineX: -0.85, headX: -0.4, armZ: 0, foreX: 0, foreZ: 0 },
-  { bobX: 0, spineX: 0, headX: 0, armZ: -2.3, foreX: 0.35, foreZ: 0.55 },
-  { bobX: 0, spineX: 0, headX: 0, armZ: 0, foreX: 0, foreZ: 0 },
+  { bobX: 0, spineX: 0, headX: 0, armZ: -2.3, foreX: 0, foreZ: 0.9 },
+  { bobX: 0, spineX: 0, headX: 0, armZ: -2.3, foreX: 0, foreZ: -0.9 },
+  { bobX: 0, spineX: 0, headX: 0, armZ: -2.3, foreX: 0, foreZ: 0.3 },
+  { bobX: 0, spineX: 0, headX: 0, armZ: -2.3, foreX: 0, foreZ: -0.3 },
 ]
 const W = 480
 const H = 360
