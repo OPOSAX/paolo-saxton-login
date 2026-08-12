@@ -1,0 +1,5 @@
+# binarios: sin normalización de saltos de línea
+*.glb binary
+*.jpg binary
+*.png binary
+*.woff2 binary
