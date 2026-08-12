@@ -57,12 +57,53 @@ const rForeRest = rest(rFore)
 // mallas
 let bodySkin = null
 let eyesSkin = null
+let doorSkin = null
 scene.traverse((o) => {
   if (!o.isMesh) return
   o.frustumCulled = false
   if (o.name === 'Eyes') eyesSkin = o
+  else if (o.name === 'Door') doorSkin = o
   else if (!bodySkin || o.name === 'Body') bodySkin = o
 })
+// puerta con bisagra (réplica de RobotModel.tsx)
+let doorGroup = null
+if (doorSkin) {
+  const mount = scene.getObjectByName('Spine01')
+  mount.updateWorldMatrix(true, false)
+  doorSkin.updateWorldMatrix(true, false)
+  const dGeom = doorSkin.geometry
+  // caja SOLO de los triángulos indexados (el buffer es compartido)
+  const db = new THREE.Box3()
+  {
+    const posA = dGeom.getAttribute('position')
+    const idx = dGeom.getIndex()
+    const vv = new THREE.Vector3()
+    for (let i = 0; i < idx.count; i++) {
+      vv.fromBufferAttribute(posA, idx.getX(i))
+      db.expandByPoint(vv)
+    }
+    db.applyMatrix4(doorSkin.matrixWorld)
+  }
+  const dCenter = db.getCenter(new THREE.Vector3())
+  const dSize = db.getSize(new THREE.Vector3())
+  doorGroup = new THREE.Group()
+  const hingeWorld = new THREE.Matrix4().setPosition(db.min.x + dSize.x * 0.04, dCenter.y, dCenter.z)
+  const mountInv = new THREE.Matrix4().copy(mount.matrixWorld).invert()
+  new THREE.Matrix4().copy(mountInv).multiply(hingeWorld).decompose(doorGroup.position, doorGroup.quaternion, doorGroup.scale)
+  mount.add(doorGroup)
+  const puerta = new THREE.Mesh(dGeom, doorSkin.material)
+  new THREE.Matrix4().copy(hingeWorld).invert().multiply(doorSkin.matrixWorld).decompose(puerta.position, puerta.quaternion, puerta.scale)
+  doorGroup.add(puerta)
+  doorSkin.removeFromParent()
+  const backing = new THREE.Mesh(
+    new THREE.PlaneGeometry(dSize.x * 0.78, dSize.y * 0.86),
+    new THREE.MeshBasicMaterial({ color: '#0b0d12', toneMapped: false }),
+  )
+  const backWorld = new THREE.Matrix4().setPosition(dCenter.x, dCenter.y, db.min.z - dSize.z * 0.05)
+  new THREE.Matrix4().copy(mountInv).multiply(backWorld).decompose(backing.position, backing.quaternion, backing.scale)
+  mount.add(backing)
+  doorGroup.userData.restQuat = doorGroup.quaternion.clone()
+}
 
 // normalizar
 const sceneBox = new THREE.Box3().expandByObject(bodySkin)
@@ -108,11 +149,12 @@ const girarMundo = (bone, angle) => {
   _qd.copy(_qp).invert().multiply(_qa).multiply(_qp)
   bone.quaternion.copy(_qd.multiply(bone.quaternion))
 }
+// puerta: cerrada / abierta de frente / abierta en 3/4 / abierta al máximo
 const views = [
-  { raise: 1.3, twist: 0.6, az: 0 },
-  { raise: 1.3, twist: -0.6, az: Math.PI / 3 },
-  { raise: 0.7, twist: 0, az: Math.PI / 2 },
-  { raise: 0, twist: 0, az: 0 },
+  { raise: 0, twist: 0, az: 0, door: 0 },
+  { raise: 0, twist: 0, az: 0, door: 1.9 },
+  { raise: 0, twist: 0, az: Math.PI / 5, door: 1.9 },
+  { raise: 0, twist: 0, az: -Math.PI / 5, door: 1.2 },
 ]
 const W = 480
 const H = 360
@@ -130,6 +172,17 @@ views.forEach((view, i) => {
     girarMundo(rArm, -view.raise)
     girarMundo(rFore, -view.raise * 0.3)
     scene.updateMatrixWorld(true)
+  }
+  if (doorGroup) {
+    doorGroup.quaternion.copy(doorGroup.userData.restQuat)
+    scene.updateMatrixWorld(true)
+    if (view.door > 0) {
+      const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -view.door)
+      doorGroup.parent.getWorldQuaternion(_qp)
+      _qd.copy(_qp).invert().multiply(qy).multiply(_qp)
+      doorGroup.quaternion.copy(_qd.multiply(doorGroup.quaternion))
+      scene.updateMatrixWorld(true)
+    }
   }
   const cam = new THREE.PerspectiveCamera(40, W / H, 0.01, 100)
   cam.position.set(Math.sin(view.az) * 7.4, 0, Math.cos(view.az) * 7.4)

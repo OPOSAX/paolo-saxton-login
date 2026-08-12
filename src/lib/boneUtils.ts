@@ -16,6 +16,8 @@ const _qDelta = new THREE.Quaternion()
 
 /** Eje X del mundo: rotar en negativo lleva lo que cuelga hacia la cámara */
 export const EJE_X = new THREE.Vector3(1, 0, 0)
+/** Eje Y del mundo (vertical): bisagras de puerta */
+export const EJE_Y = new THREE.Vector3(0, 1, 0)
 
 /**
  * Aplica al hueso una rotación de `angle` radianes alrededor de `axisWorld`

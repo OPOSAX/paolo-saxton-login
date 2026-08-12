@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
-import { girarEnEjeMundo, EJE_X } from '../lib/boneUtils'
+import { girarEnEjeMundo, EJE_X, EJE_Y } from '../lib/boneUtils'
 import type { MouseState } from './useMouseTracking'
 
 /** Campo del formulario que puede tener el foco */
@@ -43,6 +43,8 @@ export interface RobotRefs {
   /** Manos: giro de "atornillado" y dedos que abren en el saludo */
   rightHand?: RefObject<THREE.Object3D>
   leftHand?: RefObject<THREE.Object3D>
+  /** Bisagra de la puerta del estómago */
+  door?: RefObject<THREE.Object3D>
 }
 
 /** Rotación de reposo del hueso: las animaciones se SUMAN a esta base */
@@ -76,18 +78,19 @@ const ARM_FLAP = 0.065 // amplitud del aleteo lateral
  *  - duck:   se agacha: reverencia doblando el torso
  *  - fall:   se cae de lado, rebota en el piso y se vuelve a parar
  */
-const QUIRKS = ['spin', 'hop', 'shimmy', 'wave', 'laugh', 'duck', 'fall'] as const
+const QUIRKS = ['spin', 'hop', 'shimmy', 'wave', 'laugh', 'duck', 'fall', 'door'] as const
 type Quirk = (typeof QUIRKS)[number]
 /** Nombre de gesto que puede dispararse desde la interfaz */
 export type QuirkName = Quirk
 const QUIRK_DURATION: Record<Quirk, number> = {
   spin: 1.7,
   hop: 1.4,
-  shimmy: 1.6,
+  shimmy: 2.0,
   wave: 2.2,
   laugh: 1.8,
   duck: 1.7,
   fall: 2.8,
+  door: 3.2,
 }
 const QUIRK_MIN_GAP = 6 // segundos mínimos entre gestos
 const QUIRK_MAX_GAP = 14
@@ -224,6 +227,7 @@ export function useRobotAnimation(
     let qWaveRaise = 0 // alza del brazo HACIA LA CÁMARA (eje de mundo)
     let qLookDamp = 0 // 1 = ignora el cursor y mira al frente (saludo)
     let qHandOpen = 0 // 0 = puño, 1 = dedos abiertos (pulso del saludo)
+    let qDoorOpen = 0 // apertura de la puerta del estómago (radianes)
     if (!reducedMotion) {
       // gesto pedido desde la interfaz: arranca de inmediato
       if (quirkRef?.current) {
@@ -240,8 +244,14 @@ export function useRobotAnimation(
         const p = (t - st.quirkStart) / QUIRK_DURATION[st.quirk]
         if (p >= 1 || action) {
           // un nod/shake del formulario interrumpe el gesto
+          const previo = st.quirk
           st.quirk = null
           st.nextQuirk = t + QUIRK_MIN_GAP + Math.random() * (QUIRK_MAX_GAP - QUIRK_MIN_GAP)
+          // el baile remata con una reverencia
+          if (previo === 'shimmy' && !action) {
+            st.quirk = 'duck'
+            st.quirkStart = t
+          }
         } else {
           const env = Math.sin(Math.PI * p) // entra y sale suave
           // durante cualquier gesto la cabeza deja de seguir al cursor:
@@ -264,12 +274,16 @@ export function useRobotAnimation(
             qArmLZ = env * 0.6
             qArmRZ = -env * 0.6
           } else if (st.quirk === 'shimmy') {
-            // bailecito: el cuerpo gira alternado con brazos al ritmo
-            qBodyRotY = Math.sin(p * Math.PI * 6) * 0.13 * env
-            qHeadRoll = Math.sin(p * Math.PI * 6 + 1) * 0.09 * env
-            qBodyY = Math.abs(Math.sin(p * Math.PI * 6)) * 0.025 * env
-            qArmLX = Math.sin(p * Math.PI * 6) * 0.3 * env
-            qArmRX = -Math.sin(p * Math.PI * 6) * 0.3 * env
+            // BAILE exagerado: giros amplios, saltitos, brazos volando y
+            // cabeza al ritmo (al terminar remata con una reverencia)
+            qBodyRotY = Math.sin(p * Math.PI * 8) * 0.32 * env
+            qHeadRoll = Math.sin(p * Math.PI * 8 + 1) * 0.2 * env
+            qHeadYaw = Math.sin(p * Math.PI * 4) * 0.25 * env
+            qBodyY = Math.abs(Math.sin(p * Math.PI * 8)) * 0.05 * env
+            qArmLX = Math.sin(p * Math.PI * 8) * 0.6 * env
+            qArmRX = -Math.sin(p * Math.PI * 8) * 0.6 * env
+            qArmLZ = (0.4 + Math.sin(p * Math.PI * 8) * 0.4) * env
+            qArmRZ = -(0.4 - Math.sin(p * Math.PI * 8) * 0.4) * env
           } else if (st.quirk === 'wave') {
             // saluda AL FRENTE: brazo apuntando a la pantalla (rotación en
             // eje de mundo), la mano girando como atornillando y la
@@ -283,7 +297,9 @@ export function useRobotAnimation(
             qHandRY = twist * 0.6
             // las manos ABREN y CIERRAN los dedos al ritmo del saludo
             qHandOpen = (0.5 + 0.5 * Math.sin(p * Math.PI * 7 + Math.PI / 2)) * env
-            qHeadRoll = -env * 0.08
+            // la cabeza se mueve levemente, viva, mientras saluda
+            qHeadRoll = (-0.05 + Math.sin(p * Math.PI * 3) * 0.08) * env
+            qHeadPitch = Math.sin(p * Math.PI * 2) * 0.06 * env
             qLookDamp = env
           } else if (st.quirk === 'laugh') {
             // carcajada: el cuerpo rebota y la cabeza se echa atrás
@@ -321,6 +337,18 @@ export function useRobotAnimation(
             qArmLZ = flail + ang * 0.45
             qArmRZ = -flail - ang * 0.45
             qHeadPitch = ang * 0.3 // intenta levantar la cabeza
+          } else if (st.quirk === 'door') {
+            // abre la puerta del estómago, mira adentro y la cierra
+            let open
+            if (p < 0.22) open = p / 0.22
+            else if (p < 0.72) open = 1
+            else open = 1 - (p - 0.72) / 0.28
+            open = open * open * (3 - 2 * open) // suaviza entrada y salida
+            qDoorOpen = open * 1.35 // ~77°: abierta pero visible de frente
+            qHeadPitch = -open * 0.4 // mira hacia abajo, a la puerta
+            qSpineX = -open * 0.14
+            qArmLZ = open * 0.25
+            qArmRZ = -open * 0.25
           }
         }
       }
@@ -467,6 +495,15 @@ export function useRobotAnimation(
       if (rightForearm?.current) girarEnEjeMundo(rightForearm.current, EJE_X, -qWaveRaise * 0.3)
       if (leftArm.current) girarEnEjeMundo(leftArm.current, EJE_X, -qWaveRaise)
       if (leftForearm?.current) girarEnEjeMundo(leftForearm.current, EJE_X, -qWaveRaise * 0.3)
+    }
+    // puerta del estómago: gira sobre su bisagra (eje vertical del mundo)
+    const doorObj = refs.door?.current
+    if (doorObj) {
+      const restQuat = doorObj.userData.restQuat as THREE.Quaternion | undefined
+      if (restQuat) {
+        doorObj.quaternion.copy(restQuat)
+        if (qDoorOpen > 0.001) girarEnEjeMundo(doorObj, EJE_Y, -qDoorOpen)
+      }
     }
     if (antenna.current) {
       // la antena oscila y además reacciona al giro de la cabeza

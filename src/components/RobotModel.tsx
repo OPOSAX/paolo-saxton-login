@@ -5,7 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { useRobotAnimation } from '../hooks/useRobotAnimation'
 import type { FocusTarget, RobotAction, QuirkName } from '../hooks/useRobotAnimation'
-import { girarEnEjeMundo, EJE_X } from '../lib/boneUtils'
+import { girarEnEjeMundo, EJE_X, EJE_Y } from '../lib/boneUtils'
 import type { MouseState } from '../hooks/useMouseTracking'
 
 interface RobotModelProps {
@@ -49,6 +49,7 @@ interface Rig {
   rightCalf: THREE.Object3D
   leftFoot: THREE.Object3D
   rightFoot: THREE.Object3D
+  door: THREE.Object3D
   eyes: THREE.Group
   pupils: THREE.Group
   antenna: THREE.Group
@@ -63,6 +64,28 @@ function bboxOf(objects: THREE.Object3D[]): THREE.Box3 {
 
 // vector reutilizable para proyectar huesos a pantalla (sin crear basura)
 const _pv = new THREE.Vector3()
+
+/**
+ * Caja de los triángulos REALMENTE indexados por la malla, en mundo.
+ * (Las mallas separadas comparten el buffer de vértices completo, así
+ * que geometry.boundingBox daría la caja del robot entero.)
+ */
+function bboxDeIndices(mesh: THREE.Mesh): THREE.Box3 {
+  const g = mesh.geometry as THREE.BufferGeometry
+  const posA = g.getAttribute('position') as THREE.BufferAttribute
+  const idx = g.getIndex()
+  const box = new THREE.Box3()
+  const v = new THREE.Vector3()
+  if (idx) {
+    for (let i = 0; i < idx.count; i++) {
+      v.fromBufferAttribute(posA, idx.getX(i))
+      box.expandByPoint(v)
+    }
+  } else {
+    box.setFromBufferAttribute(posA)
+  }
+  return box.applyMatrix4(mesh.matrixWorld)
+}
 
 function buildRig(scene: THREE.Group): Rig {
   // el modelo original mira hacia +X: girado queda de frente a la cámara
@@ -108,14 +131,16 @@ function buildRig(scene: THREE.Group): Rig {
     b.userData.restRot = { x: b.rotation.x, y: b.rotation.y, z: b.rotation.z }
   })
 
-  // ---- mallas (cuerpo y ojos, ambas con el mismo skin) ----
+  // ---- mallas (cuerpo, ojos y puerta, todas con el mismo skin) ----
   let bodySkin: THREE.Mesh | null = null
   let eyesSkin: THREE.Mesh | null = null
+  let doorSkin: THREE.Mesh | null = null
   scene.traverse((o) => {
     const m = o as THREE.Mesh
     if (!m.isMesh) return
     m.frustumCulled = false // la malla deformada puede salir de su caja
     if (m.name === 'Eyes') eyesSkin = m
+    else if (m.name === 'Door') doorSkin = m
     else bodySkin = m
   })
 
@@ -133,6 +158,51 @@ function buildRig(scene: THREE.Group): Rig {
     src.material = glowMat
     eyes.userData.glowMat = glowMat
     eyes.userData.glowColor = new THREE.Color('#ffffff')
+  }
+
+  /*
+   * Puerta del estómago: la malla "Door" (con skin) se convierte en una
+   * pieza rígida con BISAGRA en su borde izquierdo, montada en el hueso
+   * del torso. El hook la abre girándola en el eje Y del mundo. Detrás
+   * queda un fondo oscuro: el interior del robot.
+   */
+  const door = new THREE.Group()
+  if (doorSkin) {
+    const src = doorSkin as THREE.Mesh
+    const mount = boneOrEmpty('Spine01')
+    mount.updateWorldMatrix(true, false)
+    src.updateWorldMatrix(true, false)
+    const geom = src.geometry as THREE.BufferGeometry
+    const db = bboxDeIndices(src)
+    const dCenter = db.getCenter(new THREE.Vector3())
+    const dSize = db.getSize(new THREE.Vector3())
+
+    // bisagra: borde izquierdo del panel (la manilla está a la derecha)
+    const hingeWorld = new THREE.Matrix4().setPosition(db.min.x + dSize.x * 0.04, dCenter.y, dCenter.z)
+    const mountInv = new THREE.Matrix4().copy(mount.matrixWorld).invert()
+    new THREE.Matrix4().copy(mountInv).multiply(hingeWorld).decompose(door.position, door.quaternion, door.scale)
+    mount.add(door)
+    door.updateWorldMatrix(true, false)
+    door.userData.restQuat = door.quaternion.clone()
+
+    const puerta = new THREE.Mesh(geom, src.material)
+    new THREE.Matrix4()
+      .copy(hingeWorld)
+      .invert()
+      .multiply(src.matrixWorld)
+      .decompose(puerta.position, puerta.quaternion, puerta.scale)
+    door.add(puerta)
+    src.removeFromParent()
+
+    // interior oscuro visible cuando la puerta se abre (más angosto que
+    // la puerta y hundido en el torso para que no asome por los bordes)
+    const backing = new THREE.Mesh(
+      new THREE.PlaneGeometry(dSize.x * 0.78, dSize.y * 0.86),
+      new THREE.MeshBasicMaterial({ color: '#0b0d12', toneMapped: false }),
+    )
+    const backWorld = new THREE.Matrix4().setPosition(dCenter.x, dCenter.y, db.min.z - dSize.z * 0.05)
+    new THREE.Matrix4().copy(mountInv).multiply(backWorld).decompose(backing.position, backing.quaternion, backing.scale)
+    mount.add(backing)
   }
 
 
@@ -175,6 +245,7 @@ function buildRig(scene: THREE.Group): Rig {
     rightCalf,
     leftFoot,
     rightFoot,
+    door,
     eyes,
     pupils,
     antenna,
@@ -205,6 +276,7 @@ export default function RobotModel({
   const rightForearmRef = useRef<THREE.Object3D>(null!)
   const rightHandRef = useRef<THREE.Object3D>(null!)
   const leftHandRef = useRef<THREE.Object3D>(null!)
+  const doorRef = useRef<THREE.Object3D>(null!)
   const antennaRef = useRef<THREE.Group>(null!)
   const flashRef = useRef<THREE.Mesh>(null!)
 
@@ -219,6 +291,7 @@ export default function RobotModel({
   rightForearmRef.current = rig.rightForearm
   rightHandRef.current = rig.rightHand
   leftHandRef.current = rig.leftHand
+  doorRef.current = rig.door
   antennaRef.current = rig.antenna
   flashRef.current = rig.flash
 
@@ -236,6 +309,7 @@ export default function RobotModel({
       rightForearm: rightForearmRef,
       rightHand: rightHandRef,
       leftHand: leftHandRef,
+      door: doorRef,
       antenna: antennaRef,
       screenFlash: flashRef,
     },
