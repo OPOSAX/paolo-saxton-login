@@ -149,28 +149,45 @@ const girarMundo = (bone, angle) => {
   _qd.copy(_qp).invert().multiply(_qa).multiply(_qp)
   bone.quaternion.copy(_qd.multiply(bone.quaternion))
 }
-// puerta: cerrada / abierta de frente / abierta en 3/4 / abierta al máximo
+// EDITAR AQUÍ las poses a revisar (4 vistas por render)
+const lFore = scene.getObjectByName('L_Forearm')
+const lHand = scene.getObjectByName('L_Hand')
+const lForeRest = rest(lFore)
+const lHandRest = rest(lHand)
 const views = [
+  // saltito REAL (hop 0.09 + idleBob 0.028)
+  { raise: 0, twist: 0, az: 0, door: 0, by: 0.118, laz: 0.6, raz: -0.6 },
+  // saltito 3/4
+  { raise: 0, twist: 0, az: Math.PI / 4, door: 0, by: 0.118, laz: 0.6, raz: -0.6 },
+  // spin: brazos en alto al máximo del código (1.5) + brinquito 0.05
+  { raise: 0, twist: 0, az: 0, door: 0, by: 0.05, laz: 1.5, raz: -1.5 },
+  // reposo de referencia
   { raise: 0, twist: 0, az: 0, door: 0 },
-  { raise: 0, twist: 0, az: 0, door: 1.9 },
-  { raise: 0, twist: 0, az: Math.PI / 5, door: 1.9 },
-  { raise: 0, twist: 0, az: -Math.PI / 5, door: 1.2 },
 ]
 const W = 480
 const H = 360
 views.forEach((view, i) => {
-  head.rotation.set(headRest.x, headRest.y, headRest.z)
-  spine.rotation.set(spineRest.x, spineRest.y, spineRest.z)
-  bobGroup.position.y = 0
-  bobGroup.rotation.x = 0
-  lArm.rotation.set(lRest.x, lRest.y, lRest.z)
-  rArm.rotation.set(rRest.x, rRest.y, rRest.z - 0.2)
+  head.rotation.set(headRest.x + (view.hx || 0), headRest.y + (view.hy || 0), headRest.z)
+  spine.rotation.set(spineRest.x + (view.sx || 0), spineRest.y, spineRest.z)
+  bobGroup.position.y = view.by || 0
+  bobGroup.rotation.x = view.bx || 0
+  bobGroup.rotation.y = view.byaw || 0
+  const enSaludo = view.raise > 0 ? 1 : 0
+  lArm.rotation.set(lRest.x + (view.lax || 0), lRest.y, lRest.z + 0.2 * enSaludo + (view.laz || 0))
+  rArm.rotation.set(rRest.x + (view.rax || 0), rRest.y, rRest.z - 0.2 * enSaludo + (view.raz || 0))
   rFore.rotation.set(rForeRest.x, rForeRest.y + view.twist * 0.83, rForeRest.z)
+  lFore.rotation.set(lForeRest.x, lForeRest.y + view.twist * 0.83, lForeRest.z)
+  const ho = view.handOpen || 0
   rHand.rotation.set(rHandRest.x, rHandRest.y + view.twist, rHandRest.z)
+  lHand.rotation.set(lHandRest.x, lHandRest.y + view.twist, lHandRest.z)
+  rHand.scale.set(1 + ho * 0.4, 1 - ho * 0.08, 1 + ho * 0.4)
+  lHand.scale.set(1 + ho * 0.4, 1 - ho * 0.08, 1 + ho * 0.4)
   scene.updateMatrixWorld(true)
   if (view.raise > 0) {
     girarMundo(rArm, -view.raise)
     girarMundo(rFore, -view.raise * 0.3)
+    girarMundo(lArm, -view.raise)
+    girarMundo(lFore, -view.raise * 0.3)
     scene.updateMatrixWorld(true)
   }
   if (doorGroup) {

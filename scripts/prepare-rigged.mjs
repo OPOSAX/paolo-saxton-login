@@ -66,55 +66,32 @@ function isPaleVert(i) {
 
 const v = [0, 0, 0]
 const EYE_MIN_Y = bbMin[1] + h * EYE_MIN_FRAC
-// zona de la PUERTA del estómago (panel frontal del torso; el modelo
-// original mira hacia +X, así que el frente es x positivo)
-const DOOR = { yMin: bbMin[1] + h * 0.36, yMax: bbMin[1] + h * 0.615, zAbs: 0.16, xMin: 0.03 }
 const eyesIdx = []
-const doorIdx = []
 const bodyIdx = []
 let eyeMinY = Infinity
 let eyeMaxY = -Infinity
-const dMin = [Infinity, Infinity, Infinity]
-const dMax = [-Infinity, -Infinity, -Infinity]
 for (let t = 0; t < idxArr.length; t += 3) {
   const a = idxArr[t]
   const b = idxArr[t + 1]
   const c = idxArr[t + 2]
   pos.getElement(a, v)
-  let cx = v[0]
   let cy = v[1]
-  let cz = v[2]
   pos.getElement(b, v)
-  cx += v[0]
   cy += v[1]
-  cz += v[2]
   pos.getElement(c, v)
-  cx += v[0]
   cy += v[1]
-  cz += v[2]
-  cx /= 3
   cy /= 3
-  cz /= 3
   const pale = (isPaleVert(a) ? 1 : 0) + (isPaleVert(b) ? 1 : 0) + (isPaleVert(c) ? 1 : 0)
   if (cy >= EYE_MIN_Y && pale >= 2) {
     eyesIdx.push(a, b, c)
     if (cy < eyeMinY) eyeMinY = cy
     if (cy > eyeMaxY) eyeMaxY = cy
-  } else if (cy >= DOOR.yMin && cy <= DOOR.yMax && Math.abs(cz) <= DOOR.zAbs && cx >= DOOR.xMin) {
-    doorIdx.push(a, b, c)
-    for (let k = 0; k < 3; k++) {
-      pos.getElement(idxArr[t + k], v)
-      for (let ax = 0; ax < 3; ax++) {
-        if (v[ax] < dMin[ax]) dMin[ax] = v[ax]
-        if (v[ax] > dMax[ax]) dMax[ax] = v[ax]
-      }
-    }
   } else {
     bodyIdx.push(a, b, c)
   }
 }
 console.log(
-  `Ojos: ${eyesIdx.length / 3} tris (y=[${eyeMinY.toFixed(3)}, ${eyeMaxY.toFixed(3)}]) — puerta: ${doorIdx.length / 3} tris (y=[${dMin[1].toFixed(3)}, ${dMax[1].toFixed(3)}] z=[${dMin[2].toFixed(3)}, ${dMax[2].toFixed(3)}]) — cuerpo: ${bodyIdx.length / 3} tris`,
+  `Ojos: ${eyesIdx.length / 3} tris (y=[${eyeMinY.toFixed(3)}, ${eyeMaxY.toFixed(3)}]) — cuerpo: ${bodyIdx.length / 3} tris`,
 )
 
 // nodo original con el skin
@@ -134,12 +111,7 @@ if (eyesIdx.length) {
   const eyesMesh = subsetMesh('Eyes', eyesIdx)
   const eyesNode = doc.createNode('Eyes').setMesh(eyesMesh).setSkin(skin)
   parent ? parent.addChild(eyesNode) : root.getDefaultScene().addChild(eyesNode)
-  if (doorIdx.length) {
-    const doorMesh = subsetMesh('Door', doorIdx)
-    const doorNode = doc.createNode('Door').setMesh(doorMesh).setSkin(skin)
-    parent ? parent.addChild(doorNode) : root.getDefaultScene().addChild(doorNode)
-  }
-  // el cuerpo pasa a ser una malla nueva sin ojos ni puerta
+  // el cuerpo pasa a ser una malla nueva sin los ojos
   const bodyMesh = subsetMesh('Body', bodyIdx)
   skinnedNode.setMesh(bodyMesh).setName('Body')
   mesh0.dispose()
