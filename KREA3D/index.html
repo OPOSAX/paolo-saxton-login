@@ -1,7 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Krea3D</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Convierte una imagen en un relieve tallado y genera los programas NC para router CNC.">
+<meta name="description" content="Convierte un heightmap de 16 bits, un modelo STL o una imagen en un relieve tallado y genera los programas NC para router CNC.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -171,19 +171,20 @@ input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 1px var
 
 <header class="top">
   <h1>Krea<span>3D</span></h1>
-  <p>De una imagen a un relieve tallado: programas NC listos para tu router CNC.</p>
+  <p>De un heightmap de 16 bits, un STL o una imagen a un relieve tallado: programas NC listos para tu router CNC.</p>
 </header>
 
 <div class="wrap">
   <!-- ================= PARAMETROS ================= -->
   <form class="params" id="form" autocomplete="off">
     <details class="box" open>
-      <summary>Imagen <span class="tag" id="imgTag">ejemplo</span></summary>
+      <summary>Fuente <span class="tag" id="imgTag">ejemplo</span></summary>
       <div class="fields">
         <label class="drop" id="drop">
-          <input type="file" id="file" accept="image/*">
-          <strong>Elige o arrastra una imagen</strong>
-          <span>JPG o PNG. Claro = alto (sin tallar), oscuro = profundo.</span>
+          <input type="file" id="file" accept="image/*,.stl">
+          <strong>Elige o arrastra un archivo</strong>
+          <span><b>Pro:</b> heightmap PNG de 16 bits o modelo STL (alturas reales).<br>
+          <b>Artístico:</b> imagen JPG/PNG — claro = alto, oscuro = profundo.</span>
         </label>
         <p class="hint" id="imgNote" role="status" hidden></p>
         <label class="check full"><input type="checkbox" id="darkHigh"> Invertir: oscuro = alto</label>
@@ -307,7 +308,9 @@ input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 1px var
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <script src="core.js"></script>
+<script src="input3d.js"></script>
 <script src="app.js"></script>
 
 </body></html>
