@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Página no encontrada — Paolo Saxton</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: #0a1428; color: #f0f4fc; font: 16px/1.6 "Segoe UI", system-ui, sans-serif; }
+  .caja { text-align: center; padding: 24px; }
+  a { color: #8fb3ff; }
+</style>
+<script>
+  // GitHub Pages distingue mayúsculas: /krea3d, /Krea3D, etc. → /KREA3D/
+  (function () {
+    var p = location.pathname
+    if (/^\/krea3d(\/|$)/i.test(p)) {
+      var resto = p.replace(/^\/krea3d/i, '')
+      location.replace('/KREA3D' + (resto || '/'))
+    }
+  })()
+</script>
+</head>
+<body>
+  <div class="caja">
+    <h1>Página no encontrada</h1>
+    <p><a href="/">Volver al inicio</a> · <a href="/KREA3D/">Krea3D</a></p>
+  </div>
+</body>
+</html>
