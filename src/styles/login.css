@@ -72,6 +72,134 @@ body {
   padding: 48px 32px;
 }
 
+/* ===================== Sobre mí ===================== */
+
+.form-columna {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.form-columna .login-card {
+  max-width: none;
+}
+
+.sobre-mi {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 18px 22px 20px;
+  backdrop-filter: blur(10px);
+}
+
+.sobre-mi-titulo {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fb3ff;
+}
+
+.sobre-mi-texto {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-dim, #b9c4da);
+}
+
+.sobre-mi-texto strong {
+  color: #f0f4fc;
+}
+
+.sobre-mi-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sobre-mi-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: rgba(79, 140, 255, 0.16);
+  border: 1px solid rgba(79, 140, 255, 0.45);
+  color: #cfe0ff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.sobre-mi-link:hover {
+  background: rgba(79, 140, 255, 0.3);
+}
+
+.sobre-mi-link .icono {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* ===================== Panel de animaciones ===================== */
+
+.robot-lienzo {
+  position: absolute;
+  inset: 0;
+}
+
+.panel-animaciones {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.panel-animaciones::-webkit-scrollbar {
+  display: none;
+}
+
+.boton-anim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  color: #f0f4fc;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 7px 13px 7px 9px;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.boton-anim .icono {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.boton-seguir {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.boton-seguir.activo {
+  background: rgba(79, 140, 255, 0.28);
+  border-color: rgba(79, 140, 255, 0.7);
+}
+
 /* ===================== Tarjeta glass ===================== */
 
 .login-card {
@@ -295,6 +423,30 @@ body {
   .robot-side {
     min-height: 38vh;
     height: 38vh;
+  }
+
+  /* en pantallas chicas el panel pasa a fila compacta (solo íconos)
+     dentro del área del robot, para no tapar el formulario */
+  .panel-animaciones {
+    flex-direction: row;
+    flex-wrap: wrap;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .boton-anim {
+    padding: 6px 9px;
+  }
+
+  .boton-anim .etiqueta {
+    display: none;
+  }
+
+  .boton-seguir {
+    margin-bottom: 0;
   }
 
   .form-side {

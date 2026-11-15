@@ -20,6 +20,10 @@ interface LoginPageProps {
   onSuccess?: () => void
 }
 
+/* Links personales (completar con las URLs reales) */
+const LINKEDIN_URL = ''
+const LIBRO_URL = ''
+
 export default function LoginPage({ onSuccess }: LoginPageProps) {
   const mouse = useMouseTracking()
   const focusRef = useRef<FocusTarget>(null)
@@ -79,81 +83,69 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         setSeguirMouse((v) => !v)
       }}
     >
-      <section className="robot-side" aria-hidden="true">
-        <RobotScene
-          mouse={mouse}
-          focusRef={focusRef}
-          actionRef={actionRef}
-          reducedMotion={reducedMotion}
-          quirkRef={quirkRef}
-          followRef={followRef}
-        />
-      </section>
-      {/* panel de animaciones seleccionables */}
-      <div
-        style={{
-          position: 'fixed',
-          left: 16,
-          bottom: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 7,
-          zIndex: 10,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setSeguirMouse((v) => !v)}
-          title="También puedes hacer clic en cualquier zona libre de la página"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: seguirMouse ? 'rgba(79,140,255,0.28)' : 'rgba(255,255,255,0.07)',
-            border: `1px solid ${seguirMouse ? 'rgba(79,140,255,0.7)' : 'rgba(255,255,255,0.14)'}`,
-            backdropFilter: 'blur(10px)',
-            color: '#f0f4fc',
-            font: 'inherit',
-            fontSize: 14,
-            fontWeight: 700,
-            padding: '7px 13px 7px 9px',
-            borderRadius: 10,
-            cursor: 'pointer',
-            marginBottom: 4,
-          }}
-        >
-          <span style={{ fontSize: 17 }}>🖱️</span> Seguir mouse: {seguirMouse ? 'Sí' : 'No'}
-        </button>
-        {ANIMACIONES.map((a) => (
+      <section className="robot-side">
+        <div className="robot-lienzo" aria-hidden="true">
+          <RobotScene
+            mouse={mouse}
+            focusRef={focusRef}
+            actionRef={actionRef}
+            reducedMotion={reducedMotion}
+            quirkRef={quirkRef}
+            followRef={followRef}
+          />
+        </div>
+        {/* panel de animaciones seleccionables (queda dentro del área del robot) */}
+        <div className="panel-animaciones">
           <button
-            key={a.q}
             type="button"
-            onClick={() => {
-              quirkRef.current = a.q
-            }}
-            title={a.nombre}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.14)',
-              backdropFilter: 'blur(10px)',
-              color: '#f0f4fc',
-              font: 'inherit',
-              fontSize: 14,
-              fontWeight: 600,
-              padding: '7px 13px 7px 9px',
-              borderRadius: 10,
-              cursor: 'pointer',
-            }}
+            className={`boton-anim boton-seguir${seguirMouse ? ' activo' : ''}`}
+            onClick={() => setSeguirMouse((v) => !v)}
+            title="Seguir mouse (también puedes hacer clic en cualquier zona libre)"
           >
-            <span style={{ fontSize: 17 }}>{a.icono}</span> {a.nombre}
+            <span className="icono">🖱️</span>
+            <span className="etiqueta">Seguir mouse: {seguirMouse ? 'Sí' : 'No'}</span>
           </button>
-        ))}
-      </div>
+          {ANIMACIONES.map((a) => (
+            <button
+              key={a.q}
+              type="button"
+              className="boton-anim"
+              onClick={() => {
+                quirkRef.current = a.q
+              }}
+              title={a.nombre}
+            >
+              <span className="icono">{a.icono}</span>
+              <span className="etiqueta">{a.nombre}</span>
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="form-side">
-        <LoginForm onFocusChange={handleFocusChange} onSubmitResult={handleSubmitResult} />
+        <div className="form-columna">
+          <LoginForm onFocusChange={handleFocusChange} onSubmitResult={handleSubmitResult} />
+          <aside className="sobre-mi">
+            <h2 className="sobre-mi-titulo">Sobre mí</h2>
+            <p className="sobre-mi-texto">
+              Soy <strong>Paolo Saxton</strong>: tecnólogo chileno, apasionado por la
+              inteligencia artificial y por ponerla a prueba. Autor de{' '}
+              <em>«El arte de darle problemas a la IA»</em>, un libro sobre cómo desafiar
+              a los modelos de IA para sacarles lo mejor.
+            </p>
+            <div className="sobre-mi-links">
+              {LINKEDIN_URL && (
+                <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className="sobre-mi-link">
+                  <span className="icono">💼</span> LinkedIn
+                </a>
+              )}
+              {LIBRO_URL && (
+                <a href={LIBRO_URL} target="_blank" rel="noopener noreferrer" className="sobre-mi-link">
+                  <span className="icono">📕</span> Mi libro en Amazon
+                </a>
+              )}
+            </div>
+          </aside>
+        </div>
       </section>
     </main>
   )
