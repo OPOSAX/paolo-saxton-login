@@ -21,7 +21,7 @@ interface LoginPageProps {
 }
 
 /* Links personales */
-const LINKEDIN_URL = 'https://www.linkedin.com/in/paolosaxton'
+const LINKEDIN_URL = 'https://cl.linkedin.com/in/paolo-saxton-64284412'
 const LIBRO_URL = 'https://www.amazon.com/dp/B0HMX9P1VF?language=es'
 
 export default function LoginPage({ onSuccess }: LoginPageProps) {
