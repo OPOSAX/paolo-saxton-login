@@ -20,9 +20,9 @@ interface LoginPageProps {
   onSuccess?: () => void
 }
 
-/* Links personales (completar con las URLs reales) */
-const LINKEDIN_URL = ''
-const LIBRO_URL = ''
+/* Links personales */
+const LINKEDIN_URL = 'https://www.linkedin.com/in/paolosaxton'
+const LIBRO_URL = 'https://www.amazon.com/dp/B0HMX9P1VF?language=es'
 
 export default function LoginPage({ onSuccess }: LoginPageProps) {
   const mouse = useMouseTracking()
