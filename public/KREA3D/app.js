@@ -701,6 +701,20 @@
     catch (e) { setGenError("No se pudo crear el PNG de 16 bits: " + (e && e.message || e)); }
   };
 
+  // exporta el relieve TAL COMO SE VE (con contraste, invertir y suavizado aplicados),
+  // como solido en mm, para trabajarlo en otro software (Blender, Aspire, etc.)
+  $("stlSave").onclick = () => {
+    const p = params();
+    if (!prevH) { setGenError("Carga primero una fuente para exportar el STL."); return; }
+    if (!(fin(p.W) && p.W > 0 && fin(p.H) && p.H > 0 && fin(p.depth) && p.depth > 0)) {
+      setGenError("Revisa el ancho, el alto y la profundidad antes de exportar el STL."); return;
+    }
+    try {
+      const blob = KreaInput.encodeStl({ w: prevW, h: prevHh, data: prevH }, p.W, p.H, p.depth);
+      save((p.name || "mural") + ".stl", blob);
+    } catch (e) { setGenError("No se pudo crear el STL: " + (e && e.message || e)); }
+  };
+
   if (/claude\.ai|claudeusercontent|anthropic/.test(location.hostname)) $("sandboxNote").hidden = false;
 
   setTab("2d");
