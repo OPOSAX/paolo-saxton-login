@@ -160,6 +160,23 @@
     const sw = src.w, sh = src.h, d = src.data;
     if (sw === w2 && sh === h2) return Float32Array.from(d);
     const out = new Float32Array(w2 * h2);
+    if (w2 >= sw && h2 >= sh) {
+      // ampliar: bilineal (el promedio de area saldria en bloques)
+      for (let y = 0; y < h2; y++) {
+        const fy = (y + 0.5) * sh / h2 - 0.5;
+        const b0 = Math.max(0, Math.floor(fy)), b1 = Math.min(sh - 1, b0 + 1);
+        const ty = Math.min(1, Math.max(0, fy - b0));
+        for (let x = 0; x < w2; x++) {
+          const fx = (x + 0.5) * sw / w2 - 0.5;
+          const a0 = Math.max(0, Math.floor(fx)), a1 = Math.min(sw - 1, a0 + 1);
+          const tx = Math.min(1, Math.max(0, fx - a0));
+          const v0 = d[b0 * sw + a0] * (1 - tx) + d[b0 * sw + a1] * tx;
+          const v1 = d[b1 * sw + a0] * (1 - tx) + d[b1 * sw + a1] * tx;
+          out[y * w2 + x] = v0 * (1 - ty) + v1 * ty;
+        }
+      }
+      return out;
+    }
     for (let y = 0; y < h2; y++) {
       const y0 = y * sh / h2, y1 = (y + 1) * sh / h2;
       const b0 = Math.floor(y0), b1 = Math.min(sh - 1, Math.ceil(y1) - 1);
@@ -183,5 +200,50 @@
     return out;
   }
 
-  root.KreaInput = { decodePng16, parseStl, rasterizeStl, resample };
+  // ------------------------------------------------------------ PNG 16 bits (escritura)
+  const CRC_T = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+    return t;
+  })();
+  function crc32(u8) {
+    let c = 0xffffffff;
+    for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+  function chunkPng(type, data) {
+    const out = new Uint8Array(8 + data.length + 4);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  }
+  /** Campo {w, h, data 0..1} -> Blob PNG de 16 bits en escala de grises (blanco = alto). */
+  function encodePng16(field) {
+    if (!root.pako) throw new Error("no se pudo cargar el compresor (pako).");
+    const { w, h, data } = field;
+    const raw = new Uint8Array(h * (1 + w * 2));
+    let p = 0;
+    for (let y = 0; y < h; y++) {
+      raw[p++] = 0;                                        // filtro 0
+      for (let x = 0; x < w; x++) {
+        const v = Math.max(0, Math.min(65535, Math.round(data[y * w + x] * 65535)));
+        raw[p++] = v >> 8; raw[p++] = v & 255;
+      }
+    }
+    const ihdr = new Uint8Array(13);
+    const dv = new DataView(ihdr.buffer);
+    dv.setUint32(0, w); dv.setUint32(4, h);
+    ihdr[8] = 16; ihdr[9] = 0;                             // 16 bits, escala de grises
+    return new Blob([
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      chunkPng("IHDR", ihdr),
+      chunkPng("IDAT", root.pako.deflate(raw, { level: 9 })),
+      chunkPng("IEND", new Uint8Array(0)),
+    ], { type: "image/png" });
+  }
+
+  root.KreaInput = { decodePng16, parseStl, rasterizeStl, resample, encodePng16 };
 })(typeof self !== "undefined" ? self : this);

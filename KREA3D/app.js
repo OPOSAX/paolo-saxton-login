@@ -61,15 +61,17 @@
     src = canvas; srcField = null; srcId++; aspect = canvas.width / canvas.height;
     $("imgTag").textContent = label;
     $("imgNote").textContent = note || ""; $("imgNote").hidden = !note;
+    $("iaBtn").hidden = !window.KreaDepth; $("hmSave").hidden = true; $("iaMsg").hidden = true;
     if ($("lock").checked) syncFromW();
     refresh();
   }
 
-  /** Fuente profesional: campo de alturas real (heightmap de 16 bits o STL rasterizado). */
+  /** Fuente profesional: campo de alturas real (heightmap 16 bits, STL o IA). */
   function setFieldSource(field, label, note) {
     srcField = field; src = null; srcId++; aspect = field.w / field.h;
     $("imgTag").textContent = label;
     $("imgNote").textContent = note || ""; $("imgNote").hidden = !note;
+    $("iaBtn").hidden = true; $("hmSave").hidden = false;
     if ($("lock").checked) syncFromW();
     refresh();
   }
@@ -664,6 +666,40 @@
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
   drop.addEventListener("drop", (e) => loadFile(e.dataTransfer.files[0]));
   $("gen").onclick = generate;
+
+  // ---------------------------------------------------------- IA de profundidad
+  $("iaBtn").onclick = async () => {
+    if (!src || !window.KreaDepth) return;
+    const btn = $("iaBtn"), msg = $("iaMsg");
+    btn.disabled = true; msg.hidden = false;
+    msg.textContent = "Cargando el modelo de IA (~50 MB, solo la primera vez)…";
+    const canvas = src;
+    try {
+      const raw = await KreaDepth.estimate(canvas, (fase, pct) => {
+        msg.textContent = fase === "descarga"
+          ? `Descargando el modelo de IA… ${Math.round(pct)} % (solo la primera vez; todo se calcula en tu navegador, la imagen no se sube a ningún sitio)`
+          : "Calculando la profundidad…";
+      });
+      // al aspecto exacto de la imagen, ampliado en bilineal
+      const w2 = Math.min(1024, Math.max(raw.w, canvas.width));
+      const h2 = Math.max(2, Math.round(w2 * canvas.height / canvas.width));
+      const field = { w: w2, h: h2, data: KreaInput.resample(raw, w2, h2) };
+      msg.hidden = true;
+      setFieldSource(field, `IA profundidad · ${w2} × ${h2}`,
+        "Heightmap generado con IA (Depth Anything) en tu navegador: lo cercano queda alto. " +
+        "Si sale al revés, marca «Invertir». Revisa la Vista 3D y, si te gusta, descarga el heightmap de 16 bits para guardarlo o retocarlo.");
+    } catch (e) {
+      msg.hidden = true;
+      setGenError("No se pudo estimar la profundidad: " + (e && e.message || e) + ". La primera vez se necesita conexión a internet para descargar el modelo.");
+    }
+    btn.disabled = false;
+  };
+
+  $("hmSave").onclick = () => {
+    if (!srcField) return;
+    try { save(($("name").value.trim() || "mural") + "_heightmap16.png", KreaInput.encodePng16(srcField)); }
+    catch (e) { setGenError("No se pudo crear el PNG de 16 bits: " + (e && e.message || e)); }
+  };
 
   if (/claude\.ai|claudeusercontent|anthropic/.test(location.hostname)) $("sandboxNote").hidden = false;
 
