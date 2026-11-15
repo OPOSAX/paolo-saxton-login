@@ -245,5 +245,55 @@
     ], { type: "image/png" });
   }
 
-  root.KreaInput = { decodePng16, parseStl, rasterizeStl, resample, encodePng16 };
+  // ------------------------------------------------------------ STL (escritura)
+  /** Campo {w, h, data} con alturas en mm (fila 0 = arriba) -> Blob STL binario SOLIDO:
+      superficie + paredes + base en Z0, listo para abrir en Blender, Aspire, etc.
+      sx, sy: medidas del mural en mm. zOff se suma a cada altura (para llevar -prof..0 a 0..prof). */
+  function encodeStl(field, sx, sy, zOff, maxSide) {
+    maxSide = maxSide || 500;
+    let w = field.w, h = field.h, data = field.data;
+    if (Math.max(w, h) > maxSide) {
+      const w2 = w >= h ? maxSide : Math.max(2, Math.round(maxSide * w / h));
+      const h2 = w >= h ? Math.max(2, Math.round(maxSide * h / w)) : maxSide;
+      data = resample({ w, h, data }, w2, h2); w = w2; h = h2;
+    }
+    const Z = (i, j) => data[j * w + i] + zOff;
+    const X = (i) => i / (w - 1) * sx, Y = (j) => sy - j / (h - 1) * sy;   // fila 0 = arriba = Y maxima
+    const nt = 2 * (w - 1) * (h - 1) + 4 * (w - 1 + h - 1) + 2;
+    const buf = new ArrayBuffer(84 + nt * 50);
+    const dv = new DataView(buf);
+    const head = "Krea3D relieve";
+    for (let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i));
+    dv.setUint32(80, nt, true);
+    let o = 84;
+    function tri(ax, ay, az, bx, by, bz, cx, cy, cz) {
+      const ux = bx - ax, uy = by - ay, uz = bz - az, vx = cx - ax, vy = cy - ay, vz = cz - az;
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const l = Math.hypot(nx, ny, nz) || 1;
+      dv.setFloat32(o, nx / l, true); dv.setFloat32(o + 4, ny / l, true); dv.setFloat32(o + 8, nz / l, true);
+      const vs = [ax, ay, az, bx, by, bz, cx, cy, cz];
+      for (let k = 0; k < 9; k++) dv.setFloat32(o + 12 + k * 4, vs[k], true);
+      o += 50;
+    }
+    // superficie (normales hacia +Z)
+    for (let j = 0; j < h - 1; j++) for (let i = 0; i < w - 1; i++) {
+      tri(X(i), Y(j), Z(i, j), X(i), Y(j + 1), Z(i, j + 1), X(i + 1), Y(j + 1), Z(i + 1, j + 1));
+      tri(X(i), Y(j), Z(i, j), X(i + 1), Y(j + 1), Z(i + 1, j + 1), X(i + 1), Y(j), Z(i + 1, j));
+    }
+    // paredes: perimetro antihorario visto desde arriba; P0->P1 arriba, Q0/Q1 abajo (Z0)
+    const wall = (x0, y0, z0, x1, y1, z1) => {
+      tri(x0, y0, z0, x0, y0, 0, x1, y1, 0);
+      tri(x0, y0, z0, x1, y1, 0, x1, y1, z1);
+    };
+    for (let i = 0; i < w - 1; i++) wall(X(i), 0, Z(i, h - 1), X(i + 1), 0, Z(i + 1, h - 1));           // borde Y=0, hacia +X
+    for (let j = h - 1; j > 0; j--) wall(sx, Y(j), Z(w - 1, j), sx, Y(j - 1), Z(w - 1, j - 1));        // borde X=sx, hacia +Y
+    for (let i = w - 1; i > 0; i--) wall(X(i), sy, Z(i, 0), X(i - 1), sy, Z(i - 1, 0));                // borde Y=sy, hacia -X
+    for (let j = 0; j < h - 1; j++) wall(0, Y(j), Z(0, j), 0, Y(j + 1), Z(0, j + 1));                  // borde X=0, hacia -Y
+    // base (normal hacia -Z)
+    tri(0, 0, 0, 0, sy, 0, sx, sy, 0);
+    tri(0, 0, 0, sx, sy, 0, sx, 0, 0);
+    return new Blob([buf], { type: "model/stl" });
+  }
+
+  root.KreaInput = { decodePng16, parseStl, rasterizeStl, resample, encodePng16, encodeStl };
 })(typeof self !== "undefined" ? self : this);
