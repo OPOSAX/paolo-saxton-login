@@ -6,7 +6,8 @@
   const num = (id) => { const s = String($(id).value).trim(); return s === "" ? NaN : Number(s); };
   const fin = Number.isFinite;
   const MAX_IMG_PX = 16e6, MAX_IMG_SIDE = 8192;   // la rejilla nunca necesita mas detalle que esto
-  let src = null;          // canvas con la imagen original
+  let src = null;          // canvas con la imagen original (modo artistico, 8 bits)
+  let srcField = null;     // campo de alturas {w,h,data} (heightmap 16 bits o STL, modo pro)
   let srcId = 0;           // cambia con cada imagen cargada
   let aspect = 1;
   let lastFiles = [];
@@ -57,15 +58,73 @@
   function syncFromH() { const H = num("Hh"); if (fin(H) && H > 0) $("W").value = Math.max(1, Math.round(H * aspect)); }
 
   function setSource(canvas, label, note) {
-    src = canvas; srcId++; aspect = canvas.width / canvas.height;
+    src = canvas; srcField = null; srcId++; aspect = canvas.width / canvas.height;
     $("imgTag").textContent = label;
     $("imgNote").textContent = note || ""; $("imgNote").hidden = !note;
     if ($("lock").checked) syncFromW();
     refresh();
   }
 
+  /** Fuente profesional: campo de alturas real (heightmap de 16 bits o STL rasterizado). */
+  function setFieldSource(field, label, note) {
+    srcField = field; src = null; srcId++; aspect = field.w / field.h;
+    $("imgTag").textContent = label;
+    $("imgNote").textContent = note || ""; $("imgNote").hidden = !note;
+    if ($("lock").checked) syncFromW();
+    refresh();
+  }
+
+  const baseName = (file) => file.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "_").slice(0, 40);
+  const fmtMm = (v) => String(Math.round(v * 10) / 10);
+
+  /** Despacho por tipo: STL -> rasterizar; PNG -> 16 bits si lo es; resto -> imagen de 8 bits. */
   function loadFile(file) {
-    if (!file || !file.type.startsWith("image/")) { setGenError("Ese archivo no es una imagen. Usa JPG o PNG."); return; }
+    if (!file) return;
+    const n = (file.name || "").toLowerCase();
+    if (n.endsWith(".stl")) { loadStl(file); return; }
+    if (n.endsWith(".png") || file.type === "image/png") { loadPng(file); return; }
+    if (file.type.startsWith("image/")) { loadImageFile(file); return; }
+    setGenError("Formato no reconocido. Usa un heightmap PNG de 16 bits, un modelo STL, o una imagen JPG/PNG (modo artístico).");
+  }
+
+  function loadStl(file) {
+    if (file.size > 400e6) { setGenError("El STL pesa más de 400 MB: expórtalo con menos caras."); return; }
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const tris = KreaInput.parseStl(fr.result);
+        const r = KreaInput.rasterizeStl(tris, 1800);
+        setGenError("");
+        const base = baseName(file); if (base) $("name").value = base;
+        // escala real del modelo: se proponen sus medidas en mm
+        if (r.sizeX >= 10) { $("W").value = Math.round(r.sizeX); if ($("lock").checked) syncFromW(); }
+        if (r.sizeZ > 0.5) $("depth").value = Math.round(r.sizeZ * 10) / 10;
+        setFieldSource(r, `STL · ${(tris.length / 9).toLocaleString("es")} caras`,
+          `Modo profesional: modelo STL visto desde arriba (Z hacia arriba), ${fmtMm(r.sizeX)} × ${fmtMm(r.sizeY)} × ${fmtMm(r.sizeZ)} mm. ` +
+          `Se han puesto el ancho y la profundidad del modelo para tallarlo a escala real; cámbialos si quieres otra medida.`);
+      } catch (e) { setGenError("No se pudo leer el STL: " + (e && e.message || e)); }
+    };
+    fr.onerror = () => setGenError("No se pudo leer el archivo STL.");
+    fr.readAsArrayBuffer(file);
+  }
+
+  function loadPng(file) {
+    const fr = new FileReader();
+    fr.onload = () => {
+      let hm = null;
+      try { hm = KreaInput.decodePng16(fr.result); }
+      catch (e) { setGenError("No se pudo leer el heightmap: " + (e && e.message || e)); return; }
+      if (!hm) { loadImageFile(file); return; }        // PNG normal de 8 bits: modo artistico
+      setGenError("");
+      const base = baseName(file); if (base) $("name").value = base;
+      setFieldSource(hm, `heightmap 16 bits · ${hm.w} × ${hm.h} px`,
+        "Modo profesional: heightmap de 16 bits (65.536 niveles de altura reales). Blanco = superficie, negro = fondo del tallado.");
+    };
+    fr.onerror = () => setGenError("No se pudo leer el archivo PNG.");
+    fr.readAsArrayBuffer(file);
+  }
+
+  function loadImageFile(file) {
     const url = URL.createObjectURL(file);
     const im = new Image();
     im.onload = () => {
@@ -88,17 +147,20 @@
       }
       if (!ok) { setGenError("La imagen es demasiado grande para este navegador. Redúcela (por ejemplo a 4000 px de lado) y vuelve a cargarla."); return; }
       setGenError("");
-      const base = file.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g, "_").slice(0, 40);
+      const base = baseName(file);
       if (base) $("name").value = base;
-      const note = k < 1 ? `Imagen muy grande (${nw} × ${nh} px): se ha reducido a ${cw} × ${ch} px para poder procesarla. Sigue teniendo más detalle del que usa la rejilla.` : "";
-      setSource(c, k < 1 ? `${nw} × ${nh} px → ${cw} × ${ch}` : `${nw} × ${nh} px`, note);
+      let note = "Modo artístico: el brillo de la imagen se usa como altura (claro = alto, oscuro = profundo), así que las sombras de una foto se tallan como hoyos. " +
+        "Para un relieve profesional con alturas reales carga un heightmap PNG de 16 bits o un modelo STL.";
+      if (k < 1) note = `Imagen muy grande (${nw} × ${nh} px): se ha reducido a ${cw} × ${ch} px para poder procesarla. ` + note;
+      setSource(c, k < 1 ? `imagen 8 bits · ${nw} × ${nh} px → ${cw} × ${ch}` : `imagen 8 bits · ${nw} × ${nh} px`, note);
     };
     im.onerror = () => { URL.revokeObjectURL(url); setGenError("No se pudo leer la imagen."); };
     im.src = url;
   }
 
-  /** Luminancia 0..1 de la imagen remuestreada a w×h. */
+  /** Alturas 0..1 remuestreadas a w×h: campo real (16 bits / STL) o luminancia de la imagen. */
   function luminance(w, h) {
+    if (srcField) return KreaInput.resample(srcField, w, h);
     const c = document.createElement("canvas"); c.width = w; c.height = h;
     const g = c.getContext("2d", { willReadFrequently: true });
     g.fillStyle = "#fff"; g.fillRect(0, 0, w, h);
@@ -247,12 +309,12 @@
   const fmtLines = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : Math.round(n).toLocaleString("es");
   const keyOf = (p) => srcId + "|" + JSON.stringify(p);
 
-  function updateGenButton() { $("gen").disabled = running || currentBad || !src; }
+  function updateGenButton() { $("gen").disabled = running || currentBad || (!src && !srcField); }
 
   // ---------------------------------------------------------- vista previa
   let prevH = null, prevW = 0, prevHh = 0;
   function refresh() {
-    if (!src) return;
+    if (!src && !srcField) return;
     const p = params();
     const alerts = check(p);
     currentBad = alerts.some((x) => x.bad);
