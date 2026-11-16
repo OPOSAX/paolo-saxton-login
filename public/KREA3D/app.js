@@ -348,7 +348,7 @@
     if (!sizeOk) return;
 
     const cv = $("cv2d");
-    const maxW = 1100, maxH = 700;
+    const maxW = 1500, maxH = 1150;
     const s = Math.min(maxW / p.W, maxH / p.H);
     const w = Math.max(20, Math.round(p.W * s)), h = Math.max(20, Math.round(p.H * s));
     const res = p.W / w;
@@ -426,7 +426,36 @@
       pos.setZ(j * (sx + 1) + i, prevH[rj * prevW + ci]);
     }
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ color: 0xd8c4a0, roughness: 0.92, metalness: 0 });
+    // mapa de normales a resolucion COMPLETA de la vista previa: el filo de cada borde
+    // se sombrea por pixel, como en los visores profesionales, aunque la malla sea menor
+    const nmW = prevW, nmH = prevHh;
+    const nmData = new Uint8Array(nmW * nmH * 4);
+    const resPrev = p.W / prevW;
+    for (let yT = 0; yT < nmH; yT++) {
+      const r0 = nmH - 1 - yT;                               // DataTexture: fila 0 = v0 = abajo
+      for (let x = 0; x < nmW; x++) {
+        const xl = Math.max(0, x - 1), xr = Math.min(nmW - 1, x + 1);
+        const rU = Math.max(0, r0 - 1), rD = Math.min(nmH - 1, r0 + 1);
+        const dzdx = (prevH[r0 * nmW + xr] - prevH[r0 * nmW + xl]) / ((xr - xl) * resPrev);
+        const dzdy = (prevH[rU * nmW + x] - prevH[rD * nmW + x]) / ((rD - rU) * resPrev);
+        const il = 1 / Math.hypot(dzdx, dzdy, 1);
+        const o = (yT * nmW + x) * 4;
+        nmData[o] = Math.round((-dzdx * il * 0.5 + 0.5) * 255);
+        nmData[o + 1] = Math.round((-dzdy * il * 0.5 + 0.5) * 255);
+        nmData[o + 2] = Math.round((il * 0.5 + 0.5) * 255);
+        nmData[o + 3] = 255;
+      }
+    }
+    const nmTex = new THREE.DataTexture(nmData, nmW, nmH, THREE.RGBAFormat);
+    nmTex.magFilter = THREE.LinearFilter;
+    nmTex.minFilter = THREE.LinearFilter;
+    nmTex.needsUpdate = true;
+    if (three.nmTex) three.nmTex.dispose();
+    three.nmTex = nmTex;
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xd8c4a0, roughness: 0.92, metalness: 0,
+      normalMap: nmTex, normalScale: new THREE.Vector2(1, 1),
+    });
     if (three.mesh) { three.scene.remove(three.mesh); three.mesh.geometry.dispose(); }
     three.mesh = new THREE.Mesh(geo, mat);
     three.mesh.castShadow = true;
