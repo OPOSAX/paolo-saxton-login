@@ -194,6 +194,8 @@ input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 0 1px var
         </div>
         <p class="hint" id="iaMsg" role="status" hidden></p>
         <label class="check full"><input type="checkbox" id="darkHigh"> Invertir: oscuro = alto</label>
+        <label class="f full"><b>Volumen escultórico <span id="sculptV">0.00</span></b>
+          <input type="range" id="sculpt" min="0" max="1" step="0.05" value="0"></label>
         <label class="f full"><b>Realce del relieve <span id="boostV">0.0</span></b>
           <input type="range" id="boost" min="0" max="3" step="0.1" value="0"></label>
         <label class="f full"><b>Contraste (gamma) <span id="gammaV">1.00</span></b>
