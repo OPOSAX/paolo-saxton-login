@@ -392,15 +392,20 @@
       el.appendChild(renderer.domElement);
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(35, 1, 1, 20000);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.5));
-      const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+      // iluminacion de estudio: clave suave + relleno + ambiente calido, como el render
+      // de referencia (sombras tenues, nada de negros duros)
+      scene.add(new THREE.HemisphereLight(0xfff4e4, 0x5a5048, 0.85));
+      const sun = new THREE.DirectionalLight(0xfff0dd, 0.55);
       sun.castShadow = true;
       sun.shadow.mapSize.set(2048, 2048);
       sun.shadow.bias = -0.0005;
+      sun.shadow.radius = 5;
       scene.add(sun); scene.add(sun.target);
+      const fill = new THREE.DirectionalLight(0xdde8ff, 0.3);
+      scene.add(fill);
       const controls = THREE.OrbitControls ? new THREE.OrbitControls(camera, renderer.domElement) : null;
       if (controls) controls.enableDamping = true;
-      three = { renderer, scene, camera, controls, sun, mesh: null };
+      three = { renderer, scene, camera, controls, sun, fill, mesh: null };
       const loop = () => {
         requestAnimationFrame(loop);
         if (el.hidden) return;
@@ -421,7 +426,7 @@
       pos.setZ(j * (sx + 1) + i, prevH[rj * prevW + ci]);
     }
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ color: 0xc9a06a, roughness: 0.85, metalness: 0 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xd8c4a0, roughness: 0.92, metalness: 0 });
     if (three.mesh) { three.scene.remove(three.mesh); three.mesh.geometry.dispose(); }
     three.mesh = new THREE.Mesh(geo, mat);
     three.mesh.castShadow = true;
@@ -429,13 +434,14 @@
     three.scene.add(three.mesh);
     three.scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#2b3237");
     const R = Math.max(p.W, p.H);
-    // luz rasante con sombras proyectadas: hace legible el volumen como en una escultura real
-    three.sun.position.set(-0.7 * R, 0.45 * R, 0.5 * R);
+    // clave en diagonal suave (como el render de referencia) + relleno opuesto frio tenue
+    three.sun.position.set(-0.45 * R, 0.55 * R, 0.8 * R);
     three.sun.target.position.set(0, 0, 0);
+    three.fill.position.set(0.6 * R, -0.3 * R, 0.7 * R);
     const sc = three.sun.shadow.camera;
     sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R; sc.near = 0.1; sc.far = 4 * R;
     sc.updateProjectionMatrix();
-    if (!three.placed) { three.camera.position.set(-0.25 * R, -0.9 * R, 1.25 * R); three.placed = true; }
+    if (!three.placed) { three.camera.position.set(-0.08 * R, -0.35 * R, 1.3 * R); three.placed = true; }
     three.camera.lookAt(0, 0, 0);
   }
 
