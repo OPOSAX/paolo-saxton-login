@@ -432,6 +432,46 @@
     three.mesh.castShadow = true;
     three.mesh.receiveShadow = true;
     three.scene.add(three.mesh);
+    // tablero solido debajo del relieve (faldon perimetral + fondo): sin esto, de lado
+    // la superficie tallada parece una lamina con puas en vez de un bloque macizo
+    if (three.skirt) { three.scene.remove(three.skirt); three.skirt.geometry.dispose(); }
+    {
+      const thick = fin(p.thick) && p.thick > p.depth ? p.thick : p.depth + 10;
+      const zb = -thick;
+      const X2 = (i) => -p.W / 2 + i / sx * p.W;
+      const Y2 = (j) => p.H / 2 - j / sy * p.H;
+      const zAt = (i, j) => {
+        const ci = Math.min(prevW - 1, Math.round(i / sx * (prevW - 1)));
+        const rj = Math.min(prevHh - 1, Math.round(j / sy * (prevHh - 1)));
+        return prevH[rj * prevW + ci];
+      };
+      const per = [];
+      for (let i = 0; i <= sx; i++) per.push([X2(i), Y2(0), zAt(i, 0)]);
+      for (let j = 1; j <= sy; j++) per.push([X2(sx), Y2(j), zAt(sx, j)]);
+      for (let i = sx - 1; i >= 0; i--) per.push([X2(i), Y2(sy), zAt(i, sy)]);
+      for (let j = sy - 1; j >= 1; j--) per.push([X2(0), Y2(j), zAt(0, j)]);
+      per.push(per[0]);
+      const segs = per.length - 1;
+      const posArr = new Float32Array((segs * 2 + 2) * 9);
+      let o = 0;
+      const tri = (a, b, c) => { posArr.set(a, o); posArr.set(b, o + 3); posArr.set(c, o + 6); o += 9; };
+      for (let s = 0; s < segs; s++) {
+        const a = per[s], b = per[s + 1];
+        const ab = [a[0], a[1], zb], bb = [b[0], b[1], zb];
+        tri(a, ab, bb);
+        tri(a, bb, b);
+      }
+      const c1 = [-p.W / 2, p.H / 2, zb], c2 = [p.W / 2, p.H / 2, zb], c3 = [p.W / 2, -p.H / 2, zb], c4 = [-p.W / 2, -p.H / 2, zb];
+      tri(c1, c3, c2);
+      tri(c1, c4, c3);
+      const sg = new THREE.BufferGeometry();
+      sg.setAttribute("position", new THREE.BufferAttribute(posArr, 3));
+      sg.computeVertexNormals();
+      three.skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0xc3ab85, roughness: 0.95, metalness: 0 }));
+      three.skirt.castShadow = true;
+      three.skirt.receiveShadow = true;
+      three.scene.add(three.skirt);
+    }
     three.scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#2b3237");
     const R = Math.max(p.W, p.H);
     // clave en diagonal suave (como el render de referencia) + relleno opuesto frio tenue
