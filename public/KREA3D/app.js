@@ -454,7 +454,7 @@
     three.nmTex = nmTex;
     const mat = new THREE.MeshStandardMaterial({
       color: 0xd8c4a0, roughness: 0.92, metalness: 0,
-      normalMap: nmTex, normalScale: new THREE.Vector2(1, 1),
+      normalMap: nmTex, normalScale: new THREE.Vector2(1, -1),
     });
     if (three.mesh) { three.scene.remove(three.mesh); three.mesh.geometry.dispose(); }
     three.mesh = new THREE.Mesh(geo, mat);
