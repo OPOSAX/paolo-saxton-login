@@ -381,7 +381,7 @@
     const p = params();
     if (!(p.W > 0 && p.H > 0)) return;
     if (!three) {
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
       renderer.domElement.setAttribute("role", "img");
       renderer.domElement.setAttribute("aria-label", "Vista 3D del relieve; arrastra para girarla");
@@ -405,7 +405,7 @@
       };
       loop();
     }
-    const sx = Math.max(2, Math.min(prevW - 1, 360)), sy = Math.max(2, Math.round(sx * prevHh / prevW));
+    const sx = Math.max(2, Math.min(prevW - 1, 700)), sy = Math.max(2, Math.round(sx * prevHh / prevW));
     const geo = new THREE.PlaneGeometry(p.W, p.H, sx, sy);
     const pos = geo.attributes.position;
     for (let j = 0; j <= sy; j++) for (let i = 0; i <= sx; i++) {
