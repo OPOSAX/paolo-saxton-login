@@ -147,6 +147,36 @@
         }
       }
     }
+    // Nivelar: muchos modelos generados vienen con la base INCLINADA (un lado alto y el
+    // otro bajo); esa pendiente se come el rango de profundidad y satura un lado. Se
+    // ajusta el plano medio por minimos cuadrados y se resta.
+    {
+      let cnt = 0, sxp = 0, syp = 0, szp = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0;
+      const stepL = Math.max(1, Math.floor(acc.length / 200000));
+      for (let i = 0; i < acc.length; i += stepL) {
+        const z = acc[i];
+        if (z === -Infinity) continue;
+        const x = i % w, y = (i / w) | 0;
+        cnt++; sxp += x; syp += y; szp += z;
+        sxx += x * x; syy += y * y; sxy += x * y; sxz += x * z; syz += y * z;
+      }
+      if (cnt > 100) {
+        // sistema 3x3 para z = a + b*x + c*y (Cramer)
+        const A = [[sxx, sxy, sxp], [sxy, syy, syp], [sxp, syp, cnt]];
+        const B = [sxz, syz, szp];
+        const det3 = (m) => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+          - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+          + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        const D = det3(A);
+        if (Math.abs(D) > 1e-9) {
+          const col = (k) => det3(A.map((row, r) => row.map((v2, c2) => (c2 === k ? B[r] : v2))));
+          const b = col(0) / D, c = col(1) / D;
+          for (let i = 0; i < acc.length; i++) {
+            if (acc[i] !== -Infinity) acc[i] -= b * (i % w) + c * ((i / w) | 0);
+          }
+        }
+      }
+    }
     // Normalizacion por la SUPERFICIE VISIBLE, no por la caja del solido: la base de un
     // modelo solido queda debajo y no debe comerse el rango de profundidad. Percentiles
     // 0.2/99.8 para que una pua o pico suelto tampoco aplaste el relieve.
