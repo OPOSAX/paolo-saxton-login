@@ -720,5 +720,18 @@
   if (/claude\.ai|claudeusercontent|anthropic/.test(location.hostname)) $("sandboxNote").hidden = false;
 
   setTab("2d");
-  setSource(sampleImage(), "ejemplo");
+  // ejemplo inicial: mural romano como heightmap de 16 bits (muestra el modo profesional);
+  // si no se puede cargar, queda el dibujo generado como respaldo
+  (async () => {
+    try {
+      const r = await fetch("ejemplo.png");
+      if (!r.ok) throw new Error("sin ejemplo");
+      const hm = KreaInput.decodePng16(await r.arrayBuffer());
+      if (!hm) throw new Error("ejemplo no es de 16 bits");
+      setFieldSource(hm, "ejemplo · mural romano",
+        "Ejemplo: heightmap de 16 bits de un mural romano. Carga tu propio archivo para reemplazarlo.");
+    } catch (e) {
+      setSource(sampleImage(), "ejemplo");
+    }
+  })();
 })();
