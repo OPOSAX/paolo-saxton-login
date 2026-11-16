@@ -348,7 +348,7 @@
     if (!sizeOk) return;
 
     const cv = $("cv2d");
-    const maxW = 900, maxH = 560;
+    const maxW = 1100, maxH = 700;
     const s = Math.min(maxW / p.W, maxH / p.H);
     const w = Math.max(20, Math.round(p.W * s)), h = Math.max(20, Math.round(p.H * s));
     const res = p.W / w;
@@ -418,7 +418,7 @@
       };
       loop();
     }
-    const sx = Math.max(2, Math.min(prevW - 1, 700)), sy = Math.max(2, Math.round(sx * prevHh / prevW));
+    const sx = Math.max(2, Math.min(prevW - 1, 950)), sy = Math.max(2, Math.round(sx * prevHh / prevW));
     const geo = new THREE.PlaneGeometry(p.W, p.H, sx, sy);
     const pos = geo.attributes.position;
     for (let j = 0; j <= sy; j++) for (let i = 0; i <= sx; i++) {
