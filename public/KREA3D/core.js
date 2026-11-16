@@ -56,16 +56,20 @@
       }
       v = out;
     }
-    // realce del relieve (unsharp de alturas): amplifica las formas locales
-    // (caras, pliegues, musculos) sin cambiar la profundidad total
+    // realce del relieve en DOS BANDAS (equalizacion multiescala, como los programas
+    // de relieve profesionales): la banda fina (~4 mm) levanta los rasgos de las caras,
+    // dedos y texturas; la banda media (~14 mm) refuerza narices, brazos y pliegues.
+    // La profundidad total no cambia.
     const boost = p.boost || 0;
     if (boost > 0) {
-      const rb = Math.max(1, Math.round(12 / res));
-      let base = boxBlur(v, w, h, rb);
-      base = boxBlur(base, w, h, rb);
+      const r1 = Math.max(1, Math.round(4 / res));
+      const r2 = Math.max(r1 + 1, Math.round(14 / res));
+      let b1 = boxBlur(v, w, h, r1); b1 = boxBlur(b1, w, h, r1);
+      let b2 = boxBlur(v, w, h, r2); b2 = boxBlur(b2, w, h, r2);
+      const gFine = 1 + 1.2 * boost, gMid = 1 + 0.55 * boost;
       const out = new Float32Array(v.length);
       for (let i = 0; i < v.length; i++) {
-        const t = v[i] + boost * (v[i] - base[i]);
+        const t = b2[i] + (b1[i] - b2[i]) * gMid + (v[i] - b1[i]) * gFine;
         out[i] = t < 0 ? 0 : t > 1 ? 1 : t;
       }
       v = out;
