@@ -38,6 +38,20 @@
       if (p.darkHigh) t = 1 - t;               // oscuro = alto
       v[i] = Math.pow(t, g);
     }
+    // realce del relieve (unsharp de alturas): amplifica las formas locales
+    // (caras, pliegues, musculos) sin cambiar la profundidad total
+    const boost = p.boost || 0;
+    if (boost > 0) {
+      const rb = Math.max(1, Math.round(12 / res));
+      let base = boxBlur(v, w, h, rb);
+      base = boxBlur(base, w, h, rb);
+      const out = new Float32Array(v.length);
+      for (let i = 0; i < v.length; i++) {
+        const t = v[i] + boost * (v[i] - base[i]);
+        out[i] = t < 0 ? 0 : t > 1 ? 1 : t;
+      }
+      v = out;
+    }
     const r = Math.round((p.smoothMm || 0) / res);
     if (r >= 1) { v = boxBlur(v, w, h, r); v = boxBlur(v, w, h, r); }
     const H = new Float32Array(v.length);
