@@ -180,7 +180,7 @@
     return {
       name: ($("name").value.trim() || "mural").replace(/[^\w-]+/g, "_"),
       W: num("W"), H: num("Hh"), depth: num("depth"), thick: num("thick"), res: num("res"),
-      darkHigh: $("darkHigh").checked, gamma: num("gamma"),
+      darkHigh: $("darkHigh").checked, gamma: num("gamma"), boost: num("boost"),
       blackPoint: num("blackPoint") / 100, whitePoint: num("whitePoint") / 100, smoothMm: num("smoothMm"),
       rough: { on: $("roughOn").checked, tool: { type: "flat", d: num("rD") }, stepdown: num("rStep"),
         stepoverPct: num("rOver"), allowance: num("rAllow"), feed: num("rF"), plunge: num("rFz"), rpm: Math.round(num("rS")) },
@@ -328,6 +328,7 @@
     $("fmtTag").textContent = p.format === "chaoda" ? "Chaoda" : "Genérico";
     $("fAngleBox").hidden = p.finish.tool.type !== "v";
     $("gammaV").textContent = (+p.gamma).toFixed(2);
+    $("boostV").textContent = (+p.boost || 0).toFixed(1);
     $("bpV").textContent = Math.round(p.blackPoint * 100);
     $("wpV").textContent = Math.round(p.whitePoint * 100);
     const sizeOk = fin(p.W) && fin(p.H) && p.W > 0 && p.H > 0;
