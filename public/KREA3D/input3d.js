@@ -147,10 +147,24 @@
         }
       }
     }
+    // Normalizacion por la SUPERFICIE VISIBLE, no por la caja del solido: la base de un
+    // modelo solido queda debajo y no debe comerse el rango de profundidad. Percentiles
+    // 0.2/99.8 para que una pua o pico suelto tampoco aplaste el relieve.
+    const vals = [];
+    const step = Math.max(1, Math.floor(acc.length / 400000));
+    for (let i = 0; i < acc.length; i += step) if (acc[i] !== -Infinity) vals.push(acc[i]);
+    vals.sort((a, b) => a - b);
+    let lo = minZ, hi = maxZ;
+    if (vals.length) {
+      lo = vals[Math.floor(vals.length * 0.002)];
+      hi = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.998))];
+    }
+    const span = hi - lo > 0 ? hi - lo : 1;
     const data = new Float32Array(w * h);
-    const dz = sz > 0 ? sz : 1;
-    for (let i = 0; i < acc.length; i++) data[i] = acc[i] === -Infinity ? 0 : (acc[i] - minZ) / dz;
-    return { w, h, data, sizeX: sx, sizeY: sy, sizeZ: sz };
+    for (let i = 0; i < acc.length; i++) {
+      data[i] = acc[i] === -Infinity ? 0 : Math.min(1, Math.max(0, (acc[i] - lo) / span));
+    }
+    return { w, h, data, sizeX: sx, sizeY: sy, sizeZ: hi - lo > 0 ? hi - lo : sz };
   }
 
   // ------------------------------------------------------------ remuestreo
