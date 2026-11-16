@@ -385,16 +385,22 @@
     if (!three) {
       const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.domElement.setAttribute("role", "img");
       renderer.domElement.setAttribute("aria-label", "Vista 3D del relieve; arrastra para girarla");
       el.appendChild(renderer.domElement);
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(35, 1, 1, 20000);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.55));
-      const sun = new THREE.DirectionalLight(0xffffff, 0.9); sun.position.set(-1, 1.2, 1.4); scene.add(sun);
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.5));
+      const sun = new THREE.DirectionalLight(0xffffff, 0.95);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.bias = -0.0005;
+      scene.add(sun); scene.add(sun.target);
       const controls = THREE.OrbitControls ? new THREE.OrbitControls(camera, renderer.domElement) : null;
       if (controls) controls.enableDamping = true;
-      three = { renderer, scene, camera, controls, mesh: null };
+      three = { renderer, scene, camera, controls, sun, mesh: null };
       const loop = () => {
         requestAnimationFrame(loop);
         if (el.hidden) return;
@@ -418,9 +424,17 @@
     const mat = new THREE.MeshStandardMaterial({ color: 0xc9a06a, roughness: 0.85, metalness: 0 });
     if (three.mesh) { three.scene.remove(three.mesh); three.mesh.geometry.dispose(); }
     three.mesh = new THREE.Mesh(geo, mat);
+    three.mesh.castShadow = true;
+    three.mesh.receiveShadow = true;
     three.scene.add(three.mesh);
     three.scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#2b3237");
     const R = Math.max(p.W, p.H);
+    // luz rasante con sombras proyectadas: hace legible el volumen como en una escultura real
+    three.sun.position.set(-0.7 * R, 0.45 * R, 0.5 * R);
+    three.sun.target.position.set(0, 0, 0);
+    const sc = three.sun.shadow.camera;
+    sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R; sc.near = 0.1; sc.far = 4 * R;
+    sc.updateProjectionMatrix();
     if (!three.placed) { three.camera.position.set(-0.25 * R, -0.9 * R, 1.25 * R); three.placed = true; }
     three.camera.lookAt(0, 0, 0);
   }
@@ -729,7 +743,9 @@
       const hm = KreaInput.decodePng16(await r.arrayBuffer());
       if (!hm) throw new Error("ejemplo no es de 16 bits");
       setFieldSource(hm, "ejemplo · mural romano",
-        "Ejemplo: heightmap de 16 bits de un mural romano. Carga tu propio archivo para reemplazarlo.");
+        "Ejemplo: heightmap de 16 bits de un mural romano, con el ajuste escultórico activado. " +
+        "Gira la Vista 3D con el mouse. Carga tu propio archivo para reemplazarlo.");
+      setTab("3d");                      // la vista 3D muestra el volumen real
     } catch (e) {
       setSource(sampleImage(), "ejemplo");
     }
