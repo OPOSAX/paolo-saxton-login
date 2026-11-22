@@ -193,18 +193,14 @@
 </head>
 <body>
 
-<!-- ================= Vista pública: abrir con RUT ================= -->
+<!-- ================= Vista pública: abrir con la clave del evento ================= -->
 <main id="vistaAbrir">
   <form class="tarjeta" id="formAbrir" autocomplete="on">
     <h1>Portón</h1>
-    <div class="sub">Ingresa tu RUT y la clave del evento</div>
-    <div class="campo">
-      <label for="aRut">RUT</label>
-      <input type="text" id="aRut" class="grande" placeholder="12.345.678-9" autocomplete="username" inputmode="text" required>
-    </div>
+    <div class="sub">Escribe la clave del evento</div>
     <div class="campo">
       <label for="aClave">Clave</label>
-      <input type="password" id="aClave" class="grande" autocomplete="current-password" required>
+      <input type="password" id="aClave" class="grande" autocomplete="off" required autofocus>
     </div>
     <button class="btn prim" id="btnAbrir" type="submit">Abrir portón</button>
     <div id="resAbrir"></div>
@@ -235,7 +231,7 @@
 <main id="vistaAdmin" hidden>
   <div class="barra">
     <div class="tabs">
-      <button class="tab act" data-tab="eventos">Eventos y RUT</button>
+      <button class="tab act" data-tab="eventos">Eventos</button>
       <button class="tab" data-tab="aperturas">Aperturas</button>
       <button class="tab" data-tab="reles">Relés</button>
       <button class="tab" data-tab="ajustes">Ajustes</button>
@@ -250,15 +246,14 @@
   <section class="seccion" id="tab-eventos">
     <div class="panel">
       <h2 id="tituloEvento">Nuevo evento</h2>
-      <div class="nota">Durante las fechas del evento, cualquier RUT de la lista puede abrir el portón desde esta página escribiendo su RUT y la clave. Si dejas las fechas vacías, el evento no vence. Pega los RUT uno por línea (o separados por coma); se aceptan con o sin puntos.</div>
+      <div class="nota">Mientras el evento esté vigente, cualquiera que escriba su clave en esta página puede abrir el portón. Comparte la clave solo con tus invitados. Si dejas las fechas vacías, el evento no vence.</div>
       <div class="form-evento">
         <div class="campo"><label for="eNombre">Nombre del evento</label><input type="text" id="eNombre" placeholder="Cumpleaños, asado, visita…"></div>
-        <div class="campo"><label for="eClave">Clave</label><input type="text" id="eClave" value="13"></div>
+        <div class="campo"><label for="eClave">Clave</label><input type="text" id="eClave" placeholder="Ej: 4821" autocomplete="off"></div>
         <div class="campo"><label for="eDesde">Desde</label><input type="datetime-local" id="eDesde"></div>
         <div class="campo"><label for="eHasta">Hasta</label><input type="datetime-local" id="eHasta"></div>
-        <div class="campo ancho"><label for="eRuts">RUT autorizados <span id="cuentaRuts" style="text-transform:none;letter-spacing:0"></span></label>
-          <textarea id="eRuts" placeholder="12.345.678-5&#10;9.876.543-3"></textarea></div>
       </div>
+      <div class="nota" id="avisoClave" style="margin:10px 0 0;color:var(--amber)" hidden>Una clave corta es fácil de adivinar. Usa al menos 4 caracteres.</div>
       <div class="acciones" style="justify-content:flex-start;margin-top:16px">
         <button class="btn prim" onclick="guardarEvento()">Guardar evento</button>
         <button class="btn" id="btnCancelarEd" onclick="limpiarFormEvento()" hidden>Cancelar edición</button>
@@ -277,12 +272,12 @@
   <section class="seccion" id="tab-aperturas" hidden>
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-        <div><h2>Registro de aperturas</h2><div class="nota" style="margin:0">Últimos intentos de apertura con RUT (correctos y rechazados).</div></div>
+        <div><h2>Registro de aperturas</h2><div class="nota" style="margin:0">Últimos intentos de apertura (correctos y rechazados).</div></div>
         <button class="btn" onclick="cargarAperturas()">Actualizar</button>
       </div>
       <div class="tabla-scroll" style="margin-top:16px">
         <table>
-          <thead><tr><th>Fecha</th><th>RUT</th><th>Evento</th><th>Resultado</th><th>IP</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Evento</th><th>Resultado</th><th>IP</th></tr></thead>
           <tbody id="listaAperturas"></tbody>
         </table>
       </div>
@@ -331,7 +326,7 @@
   <section class="seccion" id="tab-ajustes" hidden>
     <div class="panel">
       <h2>Apertura del portón</h2>
-      <div class="nota">Cuando un RUT autorizado abre, el servidor enciende este relé durante los segundos indicados y luego lo apaga (como apretar el botón del portón).</div>
+      <div class="nota">Cuando alguien abre con la clave de un evento, el servidor enciende este relé durante los segundos indicados y luego lo apaga (como apretar el botón del portón).</div>
       <div class="form-prog" style="margin-bottom:0">
         <div class="campo" style="flex:0 1 160px"><label for="cRele">Relé del portón</label>
           <select id="cRele">
@@ -362,32 +357,6 @@ function esc(t) {
     ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 }
 
-/* ================= RUT ================= */
-
-function limpiarRut(t) { return String(t).toUpperCase().replace(/[^0-9K]/g, ''); }
-
-function rutValido(t) {
-  const c = limpiarRut(t);
-  if (c.length < 2) return null;
-  const cuerpo = c.slice(0, -1).replace(/^0+/, ''), dv = c.slice(-1);
-  if (!/^\d{1,9}$/.test(cuerpo)) return null;
-  let suma = 0, mult = 2;
-  for (let i = cuerpo.length - 1; i >= 0; i--) {
-    suma += parseInt(cuerpo[i]) * mult;
-    mult = mult === 7 ? 2 : mult + 1;
-  }
-  const r = 11 - (suma % 11);
-  const esperado = r === 11 ? '0' : r === 10 ? 'K' : String(r);
-  return dv === esperado ? cuerpo + '-' + dv : null;
-}
-
-function formatoRut(t) {
-  const c = limpiarRut(t);
-  if (c.length < 2) return c;
-  const cuerpo = c.slice(0, -1), dv = c.slice(-1);
-  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
-}
-
 /* ================= Navegación ================= */
 
 let auth = null;
@@ -411,21 +380,18 @@ function irAdmin() {
 
 /* ================= Vista pública ================= */
 
-$('aRut').addEventListener('blur', () => { if ($('aRut').value) $('aRut').value = formatoRut($('aRut').value); });
-
 $('formAbrir').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const res = $('resAbrir'), btn = $('btnAbrir');
-  const rut = rutValido($('aRut').value);
-  if (!rut) { res.className = 'err'; res.textContent = 'Revisa el RUT, no es válido'; return; }
-  $('aRut').value = formatoRut($('aRut').value);
+  const clave = $('aClave').value.trim();
+  if (!clave) { res.className = 'err'; res.textContent = 'Escribe la clave'; return; }
   btn.disabled = true;
   res.className = ''; res.textContent = 'Abriendo…';
   try {
     const r = await fetch(API + '/api/abrir', {
       method: 'POST', cache: 'no-store',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({rut, clave: $('aClave').value})
+      body: JSON.stringify({clave})
     });
     const d = await r.json();
     if (d.ok) {
@@ -568,7 +534,7 @@ function pintarEventos() {
     div.innerHTML = `
       <div class="info">
         <div class="nom">${esc(e.nombre)}<span class="chip ${cls}">${txt}</span></div>
-        <div class="det">${esc(vig)} · clave <b style="color:var(--text)">${esc(e.clave)}</b> · ${e.ruts.length} RUT</div>
+        <div class="det">${esc(vig)} · clave <b style="color:var(--text)">${esc(e.clave)}</b></div>
       </div>
       <div class="botones">
         <button class="mini" data-a="editar">Editar</button>
@@ -578,7 +544,7 @@ function pintarEventos() {
     div.querySelector('[data-a=editar]').onclick = () => editarEvento(idx);
     div.querySelector('[data-a=pausa]').onclick = () => { eventos[idx].activo = !eventos[idx].activo; enviarEventos(); };
     div.querySelector('[data-a=borrar]').onclick = () => {
-      if (confirm('¿Borrar el evento "' + e.nombre + '"? Sus RUT ya no podrán abrir.')) {
+      if (confirm('¿Borrar el evento "' + e.nombre + '"? Su clave dejará de abrir el portón.')) {
         eventos.splice(idx, 1);
         if (editando === e.id) limpiarFormEvento();
         enviarEventos();
@@ -611,17 +577,9 @@ async function enviarEventos(msgOk) {
   return false;
 }
 
-function leerRutsTexto() {
-  const partes = $('eRuts').value.split(/[\n,;\t]+/).map(s => s.trim()).filter(Boolean);
-  const ok = [], malos = [];
-  partes.forEach(p => { const v = rutValido(p); if (v) { if (!ok.includes(v)) ok.push(v); } else malos.push(p); });
-  return {ok, malos};
-}
-
-$('eRuts').addEventListener('input', () => {
-  const {ok, malos} = leerRutsTexto();
-  $('cuentaRuts').innerHTML = '· ' + ok.length + ' válidos' +
-    (malos.length ? ' · <span style="color:var(--red)">' + malos.length + ' inválidos</span>' : '');
+$('eClave').addEventListener('input', () => {
+  const c = $('eClave').value.trim();
+  $('avisoClave').hidden = !(c && c.length < 4);
 });
 
 async function guardarEvento() {
@@ -629,14 +587,11 @@ async function guardarEvento() {
   const nombre = $('eNombre').value.trim();
   const clave = $('eClave').value.trim();
   const desde = $('eDesde').value, hasta = $('eHasta').value;
-  const {ok, malos} = leerRutsTexto();
   msg.className = 'msg err';
   if (!nombre) { msg.textContent = 'Ponle un nombre al evento'; return; }
   if (!clave) { msg.textContent = 'Define la clave del evento'; return; }
   if (desde && hasta && hasta <= desde) { msg.textContent = 'La fecha "Hasta" debe ser posterior a "Desde"'; return; }
-  if (malos.length) { msg.textContent = 'Estos RUT no son válidos: ' + malos.slice(0, 8).join(', ') + (malos.length > 8 ? '…' : ''); return; }
-  if (!ok.length) { msg.textContent = 'Agrega al menos un RUT autorizado'; return; }
-  const datos = {nombre, clave, desde, hasta, ruts: ok};
+  const datos = {nombre, clave, desde, hasta};
   if (editando) {
     const i = eventos.findIndex(e => e.id === editando);
     if (i >= 0) eventos[i] = Object.assign({}, eventos[i], datos);
@@ -655,8 +610,7 @@ function editarEvento(idx) {
   $('eClave').value = e.clave;
   $('eDesde').value = e.desde || '';
   $('eHasta').value = e.hasta || '';
-  $('eRuts').value = e.ruts.map(formatoRut).join('\n');
-  $('eRuts').dispatchEvent(new Event('input'));
+  $('eClave').dispatchEvent(new Event('input'));
   $('btnCancelarEd').hidden = false;
   $('msgEvento').textContent = '';
   window.scrollTo({top: 0, behavior: 'smooth'});
@@ -665,9 +619,9 @@ function editarEvento(idx) {
 function limpiarFormEvento(conservarMsg) {
   editando = null;
   $('tituloEvento').textContent = 'Nuevo evento';
-  $('eNombre').value = ''; $('eClave').value = '13';
-  $('eDesde').value = ''; $('eHasta').value = ''; $('eRuts').value = '';
-  $('cuentaRuts').textContent = '';
+  $('eNombre').value = ''; $('eClave').value = '';
+  $('eDesde').value = ''; $('eHasta').value = '';
+  $('avisoClave').hidden = true;
   $('btnCancelarEd').hidden = true;
   if (conservarMsg !== true) $('msgEvento').textContent = '';
 }
@@ -679,10 +633,9 @@ async function cargarAperturas() {
   try {
     const d = await api('/api/aperturas');
     if (!d.ok) return;
-    if (!d.aperturas.length) { tb.innerHTML = '<tr><td colspan="5" class="vacio">Todavía no hay intentos de apertura.</td></tr>'; return; }
+    if (!d.aperturas.length) { tb.innerHTML = '<tr><td colspan="4" class="vacio">Todavía no hay intentos de apertura.</td></tr>'; return; }
     tb.innerHTML = d.aperturas.map(a => {
-      const rut = rutValido(a.rut) ? formatoRut(a.rut) : a.rut;
-      return `<tr><td>${esc(a.fecha)}</td><td>${esc(rut)}</td><td>${esc(a.evento || '—')}</td>
+      return `<tr><td>${esc(a.fecha)}</td><td>${esc(a.evento || '—')}</td>
         <td class="${a.ok ? 'ok-t' : 'err-t'}">${a.ok ? '✔ Abrió' : esc(a.detalle)}</td>
         <td style="color:var(--muted);font-size:.8rem">${esc(a.ip)}</td></tr>`;
     }).join('');
