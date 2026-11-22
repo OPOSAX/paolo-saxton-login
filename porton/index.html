@@ -63,7 +63,8 @@
   .tarjeta h1 { text-align: center; font-size: 1.7rem; }
   .tarjeta .sub { margin-bottom: 0; }
   .grande { font-size: 1.15rem !important; padding: 12px 14px !important; text-align: center; letter-spacing: .03em; }
-  #btnAbrir { padding: 15px; font-size: 1.1rem; }
+  #btnAbrir, #btnCerrar { padding: 15px; font-size: 1.1rem; }
+  .tarjeta [hidden] { display: none !important; }
   #resAbrir { min-height: 1.4em; text-align: center; font-size: .95rem; }
   #resAbrir.ok { color: var(--green); font-weight: 700; font-size: 1.1rem; }
   #resAbrir.err { color: var(--red); }
@@ -197,12 +198,13 @@
 <main id="vistaAbrir">
   <form class="tarjeta" id="formAbrir" autocomplete="on">
     <h1>Portón</h1>
-    <div class="sub">Escribe la clave del evento</div>
-    <div class="campo">
+    <div class="sub" id="subAbrir">Escribe la clave del evento</div>
+    <div class="campo" id="campoClave">
       <label for="aClave">Clave</label>
       <input type="password" id="aClave" class="grande" autocomplete="off" required autofocus>
     </div>
     <button class="btn prim" id="btnAbrir" type="submit">Abrir portón</button>
+    <button class="btn prim" id="btnCerrar" type="button" hidden>Cerrar portón</button>
     <div id="resAbrir"></div>
   </form>
   <div class="pie"><a href="#admin" onclick="irAdmin(); return false;">Administración</a></div>
@@ -380,27 +382,36 @@ function irAdmin() {
 
 /* ================= Vista pública ================= */
 
-$('formAbrir').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const res = $('resAbrir'), btn = $('btnAbrir');
+// Paso 1: clave + "Abrir". Si abre, se cambia a "Cerrar" (otro pulso con la misma clave).
+function modoCerrar(si) {
+  $('campoClave').hidden = si;
+  $('subAbrir').hidden = si;
+  $('btnAbrir').hidden = si;
+  $('btnCerrar').hidden = !si;
+}
+
+async function enviarPorton(accion) {
+  const res = $('resAbrir');
+  const btn = accion === 'cerrar' ? $('btnCerrar') : $('btnAbrir');
   const clave = $('aClave').value.trim();
-  if (!clave) { res.className = 'err'; res.textContent = 'Escribe la clave'; return; }
+  if (!clave) { res.className = 'err'; res.textContent = 'Escribe la clave'; modoCerrar(false); return; }
   btn.disabled = true;
-  res.className = ''; res.textContent = 'Abriendo…';
+  res.className = ''; res.textContent = accion === 'cerrar' ? 'Cerrando…' : 'Abriendo…';
   try {
     const r = await fetch(API + '/api/abrir', {
       method: 'POST', cache: 'no-store',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({clave})
+      body: JSON.stringify({clave, accion})
     });
     const d = await r.json();
     if (d.ok) {
       res.className = 'ok';
-      res.textContent = '✔ ' + (d.mensaje || 'Portón abierto');
-      $('aClave').value = '';
+      res.textContent = '✔ ' + (d.mensaje || (accion === 'cerrar' ? 'Portón cerrándose' : 'Portón abierto'));
+      modoCerrar(accion !== 'cerrar');
     } else {
       res.className = 'err';
-      res.textContent = d.error || 'No se pudo abrir';
+      res.textContent = d.error || 'No se pudo enviar la orden';
+      if (accion === 'cerrar' && /clave/i.test(d.error || '')) modoCerrar(false);
     }
   } catch (e) {
     res.className = 'err';
@@ -408,7 +419,10 @@ $('formAbrir').addEventListener('submit', async (ev) => {
   } finally {
     setTimeout(() => { btn.disabled = false; }, 1500);
   }
-});
+}
+
+$('formAbrir').addEventListener('submit', (ev) => { ev.preventDefault(); enviarPorton('abrir'); });
+$('btnCerrar').addEventListener('click', () => enviarPorton('cerrar'));
 
 /* ================= Sesión admin ================= */
 
@@ -636,7 +650,7 @@ async function cargarAperturas() {
     if (!d.aperturas.length) { tb.innerHTML = '<tr><td colspan="4" class="vacio">Todavía no hay intentos de apertura.</td></tr>'; return; }
     tb.innerHTML = d.aperturas.map(a => {
       return `<tr><td>${esc(a.fecha)}</td><td>${esc(a.evento || '—')}</td>
-        <td class="${a.ok ? 'ok-t' : 'err-t'}">${a.ok ? '✔ Abrió' : esc(a.detalle)}</td>
+        <td class="${a.ok ? 'ok-t' : 'err-t'}">${a.ok ? (a.detalle === 'cerrado' ? '✔ Cerró' : '✔ Abrió') : esc(a.detalle)}</td>
         <td style="color:var(--muted);font-size:.8rem">${esc(a.ip)}</td></tr>`;
     }).join('');
   } catch (e) { manejarError(e, null); }
