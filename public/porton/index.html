@@ -18,18 +18,78 @@
     --amber: #e8a33d;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: "Segoe UI", system-ui, sans-serif;
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 24px 16px 60px;
   }
   h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
   .sub { color: var(--muted); font-size: .85rem; margin-bottom: 20px; text-align: center; }
+  a { color: var(--green); }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    padding: 10px 22px; border-radius: 10px; font-size: .9rem; cursor: pointer;
+    font-family: inherit;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: .55; cursor: wait; }
+  .btn.enc { color: var(--green); }
+  .btn.apg { color: var(--red); }
+  .btn.prim { background: var(--green); border-color: var(--green); color: #08130c; font-weight: 700; }
+  input[type=text], input[type=password], input[type=number], input[type=time],
+  input[type=datetime-local], select, textarea {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px; font-size: .95rem; font-family: inherit;
+    color-scheme: dark; width: 100%;
+  }
+  textarea { resize: vertical; min-height: 120px; font-family: ui-monospace, Consolas, monospace; font-size: .85rem; }
+  .campo { display: flex; flex-direction: column; gap: 6px; }
+  .campo label, .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ---------- Vista pública: abrir ---------- */
+  #vistaAbrir {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px 16px;
+  }
+  .tarjeta {
+    width: 100%; max-width: 380px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 16px; padding: 28px 22px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .tarjeta h1 { text-align: center; font-size: 1.7rem; }
+  .tarjeta .sub { margin-bottom: 0; }
+  .grande { font-size: 1.15rem !important; padding: 12px 14px !important; text-align: center; letter-spacing: .03em; }
+  #btnAbrir { padding: 15px; font-size: 1.1rem; }
+  #resAbrir { min-height: 1.4em; text-align: center; font-size: .95rem; }
+  #resAbrir.ok { color: var(--green); font-weight: 700; font-size: 1.1rem; }
+  #resAbrir.err { color: var(--red); }
+  .pie { margin-top: 28px; font-size: .8rem; }
+  .pie a { color: var(--muted); text-decoration: none; }
+  .pie a:hover { color: var(--text); text-decoration: underline; }
+
+  /* ---------- Login admin ---------- */
+  #vistaLogin { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #loginErr { color: var(--red); font-size: .85rem; min-height: 1.2em; text-align: center; }
+  .recordar { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); }
+
+  /* ---------- Admin ---------- */
+  #vistaAdmin { display: flex; flex-direction: column; align-items: center; padding: 20px 16px 60px; }
+  .barra {
+    width: 100%; max-width: 1000px; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab {
+    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    padding: 8px 14px; border-radius: 999px; cursor: pointer; font-size: .85rem; font-family: inherit;
+  }
+  .tab.act { color: #08130c; background: var(--green); border-color: var(--green); font-weight: 700; }
+  .seccion { width: 100%; max-width: 1000px; display: flex; flex-direction: column; align-items: center; }
+
   #conexion {
     display: inline-flex; align-items: center; gap: 8px;
     font-size: .85rem; color: var(--muted);
@@ -41,75 +101,47 @@
   .dot.err { background: var(--red); box-shadow: 0 0 8px var(--red); }
 
   .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 16px;
-    width: 100%;
-    max-width: 1000px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px; width: 100%;
   }
   .rele {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px;
     transition: background .25s, border-color .25s;
   }
   .rele.on { background: var(--card-on); border-color: var(--green); }
   .rele h2 { font-size: 1.05rem; font-weight: 600; }
   .estado { font-size: .8rem; color: var(--muted); min-height: 1.1em; }
   .rele.on .estado { color: var(--green); font-weight: 600; }
-
   .switch {
-    position: relative; width: 70px; height: 36px;
-    border-radius: 999px; border: none; cursor: pointer;
-    background: #39455a; transition: background .25s;
+    position: relative; width: 70px; height: 36px; border-radius: 999px; border: none;
+    cursor: pointer; background: #39455a; transition: background .25s;
   }
   .switch::after {
-    content: ""; position: absolute; top: 4px; left: 4px;
-    width: 28px; height: 28px; border-radius: 50%;
-    background: #cfd8e5; transition: left .25s, background .25s;
+    content: ""; position: absolute; top: 4px; left: 4px; width: 28px; height: 28px;
+    border-radius: 50%; background: #cfd8e5; transition: left .25s, background .25s;
   }
   .rele.on .switch { background: var(--green); }
   .rele.on .switch::after { left: 38px; background: #fff; }
   .switch:disabled { opacity: .5; cursor: wait; }
-
   .acciones { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-  .btn {
-    border: 1px solid var(--border); background: var(--card); color: var(--text);
-    padding: 10px 22px; border-radius: 10px; font-size: .9rem; cursor: pointer;
-    font-family: inherit;
-  }
-  .btn:hover { border-color: var(--muted); }
-  .btn.enc { color: var(--green); }
-  .btn.apg { color: var(--red); }
-  #aviso { margin-top: 16px; font-size: .85rem; color: var(--red); min-height: 1.2em; text-align: center; max-width: 600px; }
+  .aviso { margin-top: 12px; font-size: .85rem; color: var(--red); min-height: 1.2em; text-align: center; }
 
-  /* ---------- Programacion horaria ---------- */
   .panel {
-    width: 100%; max-width: 1000px; margin-top: 40px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 14px; padding: 22px;
+    width: 100%; margin-top: 24px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 14px; padding: 22px;
   }
+  .panel:first-child { margin-top: 0; }
   .panel h2 { font-size: 1.15rem; margin-bottom: 4px; }
-  .panel .nota { color: var(--muted); font-size: .8rem; margin-bottom: 18px; }
-
+  .panel .nota { color: var(--muted); font-size: .8rem; margin-bottom: 18px; line-height: 1.5; }
   .form-prog {
     display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
     background: #141b26; border: 1px solid var(--border);
     border-radius: 10px; padding: 14px; margin-bottom: 20px;
   }
-  .campo { display: flex; flex-direction: column; gap: 6px; }
-  .campo label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  select, input[type=time], input[type=text], input[type=password] {
-    background: var(--bg); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 10px; font-size: .95rem; font-family: inherit;
-    color-scheme: dark;
-  }
+  .form-prog .campo { flex: 1 1 160px; }
+  .form-evento { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .form-evento .ancho { grid-column: 1 / -1; }
   .dias { display: flex; gap: 6px; flex-wrap: wrap; }
   .dia {
     width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border);
@@ -125,130 +157,294 @@
   .hON { color: var(--green); font-weight: 600; }
   .hOFF { color: var(--red); font-weight: 600; }
   .tag-dia {
-    display: inline-block; min-width: 22px; text-align: center;
-    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-    padding: 2px 4px; margin-right: 3px; font-size: .75rem; color: var(--text);
+    display: inline-block; min-width: 22px; text-align: center; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px; margin-right: 3px;
+    font-size: .75rem; color: var(--text);
   }
   .mini {
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
-    border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: .8rem;
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: .8rem; font-family: inherit;
   }
   .mini.borrar { color: var(--red); }
   .mini.pausa { color: var(--amber); }
   .inactivo td { opacity: .45; }
   .vacio { color: var(--muted); text-align: center; padding: 18px !important; }
-  #avisoProg { margin-top: 10px; font-size: .85rem; color: var(--red); min-height: 1.2em; }
   .tabla-scroll { overflow-x: auto; }
 
-  /* ---------- Login ---------- */
-  #login {
-    position: fixed; inset: 0; background: var(--bg);
-    display: flex; align-items: center; justify-content: center; padding: 16px;
-    z-index: 10;
+  .evento {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+    display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; background: #141b26;
+    margin-bottom: 12px;
   }
-  #login form {
-    width: 100%; max-width: 340px; background: var(--card);
-    border: 1px solid var(--border); border-radius: 14px; padding: 26px 22px;
-    display: flex; flex-direction: column; gap: 14px;
-  }
-  #login h1 { text-align: center; }
-  #login input[type=text], #login input[type=password] { width: 100%; }
-  #login .recordar { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); }
-  #loginErr { color: var(--red); font-size: .85rem; min-height: 1.2em; text-align: center; }
-  .salir { position: absolute; top: 16px; right: 16px; padding: 6px 12px; font-size: .8rem; }
+  .evento .info { flex: 1 1 260px; }
+  .evento .nom { font-weight: 700; font-size: 1rem; }
+  .evento .det { color: var(--muted); font-size: .82rem; margin-top: 4px; line-height: 1.5; }
+  .evento .botones { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { display: inline-block; font-size: .72rem; font-weight: 700; border-radius: 999px; padding: 2px 9px; margin-left: 6px; vertical-align: middle; }
+  .chip.vig { background: var(--card-on); color: var(--green); border: 1px solid var(--green); }
+  .chip.prog { color: var(--amber); border: 1px solid var(--amber); }
+  .chip.fin, .chip.pau { color: var(--muted); border: 1px solid var(--border); }
+  .ok-t { color: var(--green); font-weight: 600; }
+  .err-t { color: var(--red); }
+  .msg { font-size: .85rem; min-height: 1.2em; margin-top: 10px; }
+  .msg.err { color: var(--red); }
+  .msg.ok { color: var(--green); }
 </style>
 </head>
 <body>
-  <div id="login" hidden>
-    <form id="loginForm" autocomplete="on">
-      <h1>Portón</h1>
-      <div class="campo">
-        <label for="lUser">Usuario</label>
-        <input type="text" id="lUser" name="username" autocomplete="username" required>
-      </div>
-      <div class="campo">
-        <label for="lPass">Contraseña</label>
-        <input type="password" id="lPass" name="password" autocomplete="current-password" required>
-      </div>
-      <label class="recordar"><input type="checkbox" id="lRec" checked> Recordarme en este dispositivo</label>
-      <button class="btn enc" type="submit" id="lBtn">Entrar</button>
-      <div id="loginErr"></div>
-    </form>
+
+<!-- ================= Vista pública: abrir con RUT ================= -->
+<main id="vistaAbrir">
+  <form class="tarjeta" id="formAbrir" autocomplete="on">
+    <h1>Portón</h1>
+    <div class="sub">Ingresa tu RUT y la clave del evento</div>
+    <div class="campo">
+      <label for="aRut">RUT</label>
+      <input type="text" id="aRut" class="grande" placeholder="12.345.678-9" autocomplete="username" inputmode="text" required>
+    </div>
+    <div class="campo">
+      <label for="aClave">Clave</label>
+      <input type="password" id="aClave" class="grande" autocomplete="current-password" required>
+    </div>
+    <button class="btn prim" id="btnAbrir" type="submit">Abrir portón</button>
+    <div id="resAbrir"></div>
+  </form>
+  <div class="pie"><a href="#admin" onclick="irAdmin(); return false;">Administración</a></div>
+</main>
+
+<!-- ================= Login administración ================= -->
+<main id="vistaLogin" hidden>
+  <form class="tarjeta" id="loginForm" autocomplete="on">
+    <h1>Administración</h1>
+    <div class="campo">
+      <label for="lUser">Usuario</label>
+      <input type="text" id="lUser" name="username" autocomplete="username" required>
+    </div>
+    <div class="campo">
+      <label for="lPass">Contraseña</label>
+      <input type="password" id="lPass" name="password" autocomplete="current-password" required>
+    </div>
+    <label class="recordar"><input type="checkbox" id="lRec" checked> Recordarme en este dispositivo</label>
+    <button class="btn enc" type="submit" id="lBtn">Entrar</button>
+    <div id="loginErr"></div>
+    <div class="sub" style="margin:0"><a href="#" onclick="irPublico(); return false;" style="color:var(--muted)">← Volver</a></div>
+  </form>
+</main>
+
+<!-- ================= Administración ================= -->
+<main id="vistaAdmin" hidden>
+  <div class="barra">
+    <div class="tabs">
+      <button class="tab act" data-tab="eventos">Eventos y RUT</button>
+      <button class="tab" data-tab="aperturas">Aperturas</button>
+      <button class="tab" data-tab="reles">Relés</button>
+      <button class="tab" data-tab="ajustes">Ajustes</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="irPublico()" style="padding:6px 12px;font-size:.8rem">Ver portada</button>
+      <button class="btn" onclick="salir()" style="padding:6px 12px;font-size:.8rem">Salir</button>
+    </div>
   </div>
 
-  <button class="btn salir" onclick="salir()">Salir</button>
-  <h1>Portón</h1>
-  <div class="sub">Módulo de relés HF-A11 · <span id="ipDisp">…</span></div>
-  <div class="sub" id="horaSrv" style="font-size:1rem;color:var(--text)">— · --:--</div>
-  <div id="conexion"><span class="dot" id="dot"></span><span id="conTexto">Conectando…</span></div>
-
-  <div class="grid" id="grid"></div>
-
-  <div class="acciones">
-    <button class="btn enc" onclick="todos('on')">Encender todos</button>
-    <button class="btn apg" onclick="todos('off')">Apagar todos</button>
-  </div>
-  <div id="aviso"></div>
-
-  <!-- ============ Programación horaria ============ -->
-  <div class="panel">
-    <h2>⏱️ Programación horaria</h2>
-    <div class="nota">Los programas corren en el servidor las 24 horas, aunque cierres esta página. Puedes dejar vacía la hora de encendido o de apagado si solo quieres una de las dos.</div>
-
-    <div class="form-prog">
-      <div class="campo">
-        <label>Relé</label>
-        <select id="fRele">
-          <option value="1">Relé 1</option><option value="2">Relé 2</option>
-          <option value="3">Relé 3</option><option value="4">Relé 4</option>
-          <option value="5">Relé 5</option>
-        </select>
+  <!-- ---------- Eventos ---------- -->
+  <section class="seccion" id="tab-eventos">
+    <div class="panel">
+      <h2 id="tituloEvento">Nuevo evento</h2>
+      <div class="nota">Durante las fechas del evento, cualquier RUT de la lista puede abrir el portón desde esta página escribiendo su RUT y la clave. Si dejas las fechas vacías, el evento no vence. Pega los RUT uno por línea (o separados por coma); se aceptan con o sin puntos.</div>
+      <div class="form-evento">
+        <div class="campo"><label for="eNombre">Nombre del evento</label><input type="text" id="eNombre" placeholder="Cumpleaños, asado, visita…"></div>
+        <div class="campo"><label for="eClave">Clave</label><input type="text" id="eClave" value="13"></div>
+        <div class="campo"><label for="eDesde">Desde</label><input type="datetime-local" id="eDesde"></div>
+        <div class="campo"><label for="eHasta">Hasta</label><input type="datetime-local" id="eHasta"></div>
+        <div class="campo ancho"><label for="eRuts">RUT autorizados <span id="cuentaRuts" style="text-transform:none;letter-spacing:0"></span></label>
+          <textarea id="eRuts" placeholder="12.345.678-5&#10;9.876.543-3"></textarea></div>
       </div>
-      <div class="campo">
-        <label>Días</label>
-        <div class="dias" id="fDias"></div>
+      <div class="acciones" style="justify-content:flex-start;margin-top:16px">
+        <button class="btn prim" onclick="guardarEvento()">Guardar evento</button>
+        <button class="btn" id="btnCancelarEd" onclick="limpiarFormEvento()" hidden>Cancelar edición</button>
       </div>
-      <div class="campo">
-        <label>Encender a las</label>
-        <input type="time" id="fEnc">
-      </div>
-      <div class="campo">
-        <label>Apagar a las</label>
-        <input type="time" id="fApg">
-      </div>
-      <button class="btn enc" onclick="agregarPrograma()">＋ Añadir programa</button>
+      <div class="msg" id="msgEvento"></div>
     </div>
 
-    <div class="tabla-scroll">
-      <table>
-        <thead>
-          <tr><th>Relé</th><th>Días</th><th>Enciende</th><th>Apaga</th><th></th><th></th></tr>
-        </thead>
-        <tbody id="listaProg"></tbody>
-      </table>
+    <div class="panel">
+      <h2>Eventos</h2>
+      <div class="nota">Solo los eventos <b style="color:var(--green)">vigentes</b> permiten abrir. Pausa un evento para bloquearlo sin borrarlo.</div>
+      <div id="listaEventos"></div>
     </div>
-    <div id="avisoProg"></div>
-  </div>
+  </section>
+
+  <!-- ---------- Aperturas ---------- -->
+  <section class="seccion" id="tab-aperturas" hidden>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div><h2>Registro de aperturas</h2><div class="nota" style="margin:0">Últimos intentos de apertura con RUT (correctos y rechazados).</div></div>
+        <button class="btn" onclick="cargarAperturas()">Actualizar</button>
+      </div>
+      <div class="tabla-scroll" style="margin-top:16px">
+        <table>
+          <thead><tr><th>Fecha</th><th>RUT</th><th>Evento</th><th>Resultado</th><th>IP</th></tr></thead>
+          <tbody id="listaAperturas"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- Relés ---------- -->
+  <section class="seccion" id="tab-reles" hidden>
+    <div class="sub" style="margin-bottom:6px">Módulo HF-A11 · <span id="ipDisp">…</span></div>
+    <div class="sub" id="horaSrv" style="font-size:1rem;color:var(--text)">— · --:--</div>
+    <div id="conexion"><span class="dot" id="dot"></span><span id="conTexto">Conectando…</span></div>
+    <div class="grid" id="grid"></div>
+    <div class="acciones">
+      <button class="btn enc" onclick="todos('on')">Encender todos</button>
+      <button class="btn apg" onclick="todos('off')">Apagar todos</button>
+    </div>
+    <div class="aviso" id="aviso"></div>
+
+    <div class="panel">
+      <h2>⏱️ Programación horaria</h2>
+      <div class="nota">Los programas corren en el servidor las 24 horas, aunque cierres esta página. Puedes dejar vacía la hora de encendido o de apagado si solo quieres una de las dos.</div>
+      <div class="form-prog">
+        <div class="campo" style="flex:0 1 120px"><label>Relé</label>
+          <select id="fRele">
+            <option value="1">Relé 1</option><option value="2">Relé 2</option>
+            <option value="3">Relé 3</option><option value="4">Relé 4</option>
+            <option value="5">Relé 5</option>
+          </select>
+        </div>
+        <div class="campo" style="flex:0 1 auto"><label>Días</label><div class="dias" id="fDias"></div></div>
+        <div class="campo" style="flex:0 1 130px"><label>Encender a las</label><input type="time" id="fEnc"></div>
+        <div class="campo" style="flex:0 1 130px"><label>Apagar a las</label><input type="time" id="fApg"></div>
+        <button class="btn enc" onclick="agregarPrograma()">＋ Añadir programa</button>
+      </div>
+      <div class="tabla-scroll">
+        <table>
+          <thead><tr><th>Relé</th><th>Días</th><th>Enciende</th><th>Apaga</th><th></th><th></th></tr></thead>
+          <tbody id="listaProg"></tbody>
+        </table>
+      </div>
+      <div class="msg err" id="avisoProg"></div>
+    </div>
+  </section>
+
+  <!-- ---------- Ajustes ---------- -->
+  <section class="seccion" id="tab-ajustes" hidden>
+    <div class="panel">
+      <h2>Apertura del portón</h2>
+      <div class="nota">Cuando un RUT autorizado abre, el servidor enciende este relé durante los segundos indicados y luego lo apaga (como apretar el botón del portón).</div>
+      <div class="form-prog" style="margin-bottom:0">
+        <div class="campo" style="flex:0 1 160px"><label for="cRele">Relé del portón</label>
+          <select id="cRele">
+            <option value="1">Relé 1</option><option value="2">Relé 2</option>
+            <option value="3">Relé 3</option><option value="4">Relé 4</option>
+            <option value="5">Relé 5</option>
+          </select>
+        </div>
+        <div class="campo" style="flex:0 1 160px"><label for="cPulso">Pulso (segundos)</label>
+          <input type="number" id="cPulso" min="0.5" max="30" step="0.5" value="2"></div>
+        <button class="btn prim" onclick="guardarConfig()">Guardar</button>
+      </div>
+      <div class="msg" id="msgConfig"></div>
+    </div>
+  </section>
+</main>
 
 <script>
 // Servidor de relés (contenedor "reles" en OVH, publicado por HTTPS)
 const API = 'https://porton-api.paolosaxton.com';
 const CLAVE_STORE = 'porton_auth';
-
 const NUM_RELES = 5;
 const DIAS_NOMBRE = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-const grid = document.getElementById('grid');
-const dot = document.getElementById('dot');
-const conTexto = document.getElementById('conTexto');
-const aviso = document.getElementById('aviso');
-const avisoProg = document.getElementById('avisoProg');
-const loginBox = document.getElementById('login');
-const loginErr = document.getElementById('loginErr');
+const $ = id => document.getElementById(id);
 
-/* ---------- Sesión ---------- */
+function esc(t) {
+  return String(t == null ? '' : t).replace(/[&<>"']/g, c =>
+    ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+/* ================= RUT ================= */
+
+function limpiarRut(t) { return String(t).toUpperCase().replace(/[^0-9K]/g, ''); }
+
+function rutValido(t) {
+  const c = limpiarRut(t);
+  if (c.length < 2) return null;
+  const cuerpo = c.slice(0, -1).replace(/^0+/, ''), dv = c.slice(-1);
+  if (!/^\d{1,9}$/.test(cuerpo)) return null;
+  let suma = 0, mult = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += parseInt(cuerpo[i]) * mult;
+    mult = mult === 7 ? 2 : mult + 1;
+  }
+  const r = 11 - (suma % 11);
+  const esperado = r === 11 ? '0' : r === 10 ? 'K' : String(r);
+  return dv === esperado ? cuerpo + '-' + dv : null;
+}
+
+function formatoRut(t) {
+  const c = limpiarRut(t);
+  if (c.length < 2) return c;
+  const cuerpo = c.slice(0, -1), dv = c.slice(-1);
+  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+}
+
+/* ================= Navegación ================= */
 
 let auth = null;
-let timer = null;
+let timerReles = null;
+
+function mostrar(vista) {
+  ['vistaAbrir', 'vistaLogin', 'vistaAdmin'].forEach(v => $(v).hidden = v !== vista);
+  if (vista !== 'vistaAdmin') pararReles();
+}
+
+function irPublico() {
+  history.replaceState(null, '', location.pathname);
+  mostrar('vistaAbrir');
+}
+
+function irAdmin() {
+  history.replaceState(null, '', '#admin');
+  if (auth) abrirAdmin();
+  else { mostrar('vistaLogin'); $('loginErr').textContent = ''; $('lUser').focus(); }
+}
+
+/* ================= Vista pública ================= */
+
+$('aRut').addEventListener('blur', () => { if ($('aRut').value) $('aRut').value = formatoRut($('aRut').value); });
+
+$('formAbrir').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const res = $('resAbrir'), btn = $('btnAbrir');
+  const rut = rutValido($('aRut').value);
+  if (!rut) { res.className = 'err'; res.textContent = 'Revisa el RUT, no es válido'; return; }
+  $('aRut').value = formatoRut($('aRut').value);
+  btn.disabled = true;
+  res.className = ''; res.textContent = 'Abriendo…';
+  try {
+    const r = await fetch(API + '/api/abrir', {
+      method: 'POST', cache: 'no-store',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({rut, clave: $('aClave').value})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      res.className = 'ok';
+      res.textContent = '✔ ' + (d.mensaje || 'Portón abierto');
+      $('aClave').value = '';
+    } else {
+      res.className = 'err';
+      res.textContent = d.error || 'No se pudo abrir';
+    }
+  } catch (e) {
+    res.className = 'err';
+    res.textContent = 'No se pudo contactar con el servidor';
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 1500);
+  }
+});
+
+/* ================= Sesión admin ================= */
 
 function leerAuth() {
   try { return localStorage.getItem(CLAVE_STORE) || sessionStorage.getItem(CLAVE_STORE); }
@@ -271,38 +467,25 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
-function mostrarLogin(msg) {
-  if (timer) { clearInterval(timer); timer = null; }
-  loginErr.textContent = msg || '';
-  loginBox.hidden = false;
-  document.getElementById('lUser').focus();
+function postJSON(path, data) {
+  return api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
 }
 
-function iniciar() {
-  loginBox.hidden = true;
-  refrescar();
-  cargarProgramas();
-  if (!timer) timer = setInterval(refrescar, 5000);
-}
-
-document.getElementById('loginForm').addEventListener('submit', async (ev) => {
+$('loginForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const u = document.getElementById('lUser').value.trim();
-  const p = document.getElementById('lPass').value;
-  const btn = document.getElementById('lBtn');
+  const u = $('lUser').value.trim(), p = $('lPass').value, btn = $('lBtn');
   btn.disabled = true;
-  loginErr.textContent = 'Comprobando…';
+  $('loginErr').textContent = 'Comprobando…';
   auth = btoa(unescape(encodeURIComponent(u + ':' + p)));
   try {
-    await api('/api/horarios');           // valida la clave sin tocar el módulo
-    guardarAuth(auth, document.getElementById('lRec').checked);
-    document.getElementById('lPass').value = '';
-    iniciar();
+    await api('/api/config');            // valida la clave sin tocar el módulo
+    guardarAuth(auth, $('lRec').checked);
+    $('lPass').value = '';
+    abrirAdmin();
   } catch (e) {
     auth = null;
-    loginErr.textContent = e instanceof NoAutorizado
-      ? 'Usuario o contraseña incorrectos'
-      : 'No se pudo contactar con el servidor';
+    $('loginErr').textContent = e instanceof NoAutorizado
+      ? 'Usuario o contraseña incorrectos' : 'No se pudo contactar con el servidor';
   } finally {
     btn.disabled = false;
   }
@@ -311,15 +494,220 @@ document.getElementById('loginForm').addEventListener('submit', async (ev) => {
 function salir() {
   auth = null;
   guardarAuth(null);
-  mostrarLogin();
+  irPublico();
 }
 
 function manejarError(e, destino, texto) {
-  if (e instanceof NoAutorizado) { guardarAuth(null); mostrarLogin('La sesión expiró, vuelve a entrar'); return; }
-  destino.textContent = texto;
+  if (e instanceof NoAutorizado) {
+    auth = null; guardarAuth(null);
+    mostrar('vistaLogin');
+    $('loginErr').textContent = 'La sesión expiró, vuelve a entrar';
+    return;
+  }
+  if (destino) { destino.className = 'msg err'; destino.textContent = texto; }
 }
 
-/* ---------- Control manual ---------- */
+function abrirAdmin() {
+  mostrar('vistaAdmin');
+  cambiarTab(tabActual);
+}
+
+/* ================= Pestañas ================= */
+
+let tabActual = 'eventos';
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => cambiarTab(b.dataset.tab));
+
+function cambiarTab(t) {
+  tabActual = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('act', b.dataset.tab === t));
+  ['eventos', 'aperturas', 'reles', 'ajustes'].forEach(x => $('tab-' + x).hidden = x !== t);
+  pararReles();
+  if (t === 'eventos') cargarEventos();
+  if (t === 'aperturas') cargarAperturas();
+  if (t === 'reles') { refrescar(); cargarProgramas(); timerReles = setInterval(refrescar, 5000); }
+  if (t === 'ajustes') cargarConfig();
+}
+
+function pararReles() { if (timerReles) { clearInterval(timerReles); timerReles = null; } }
+
+/* ================= Eventos ================= */
+
+let eventos = [];
+let editando = null;   // id del evento en edición
+
+function estadoEvento(e) {
+  if (!e.activo) return ['pau', 'Pausado'];
+  const ahora = new Date();
+  const t = ahora.getFullYear() + '-' + String(ahora.getMonth() + 1).padStart(2, '0') + '-' +
+    String(ahora.getDate()).padStart(2, '0') + 'T' + String(ahora.getHours()).padStart(2, '0') + ':' +
+    String(ahora.getMinutes()).padStart(2, '0');
+  if (e.desde && t < e.desde) return ['prog', 'Programado'];
+  if (e.hasta && t > e.hasta) return ['fin', 'Terminado'];
+  return ['vig', 'Vigente'];
+}
+
+function fechaBonita(f) {
+  if (!f) return '';
+  const [d, h] = f.split('T');
+  const [a, m, dd] = d.split('-');
+  return dd + '/' + m + '/' + a + ' ' + h;
+}
+
+function pintarEventos() {
+  const cont = $('listaEventos');
+  if (!eventos.length) { cont.innerHTML = '<div class="vacio">No hay eventos. Crea uno arriba.</div>'; return; }
+  cont.innerHTML = '';
+  eventos.forEach((e, idx) => {
+    const [cls, txt] = estadoEvento(e);
+    let vig = 'Sin vencimiento';
+    if (e.desde && e.hasta) vig = fechaBonita(e.desde) + ' → ' + fechaBonita(e.hasta);
+    else if (e.desde) vig = 'Desde ' + fechaBonita(e.desde);
+    else if (e.hasta) vig = 'Hasta ' + fechaBonita(e.hasta);
+    const div = document.createElement('div');
+    div.className = 'evento';
+    div.innerHTML = `
+      <div class="info">
+        <div class="nom">${esc(e.nombre)}<span class="chip ${cls}">${txt}</span></div>
+        <div class="det">${esc(vig)} · clave <b style="color:var(--text)">${esc(e.clave)}</b> · ${e.ruts.length} RUT</div>
+      </div>
+      <div class="botones">
+        <button class="mini" data-a="editar">Editar</button>
+        <button class="mini pausa" data-a="pausa">${e.activo ? 'Pausar' : 'Activar'}</button>
+        <button class="mini borrar" data-a="borrar">Borrar</button>
+      </div>`;
+    div.querySelector('[data-a=editar]').onclick = () => editarEvento(idx);
+    div.querySelector('[data-a=pausa]').onclick = () => { eventos[idx].activo = !eventos[idx].activo; enviarEventos(); };
+    div.querySelector('[data-a=borrar]').onclick = () => {
+      if (confirm('¿Borrar el evento "' + e.nombre + '"? Sus RUT ya no podrán abrir.')) {
+        eventos.splice(idx, 1);
+        if (editando === e.id) limpiarFormEvento();
+        enviarEventos();
+      }
+    };
+    cont.appendChild(div);
+  });
+}
+
+async function cargarEventos() {
+  try {
+    const d = await api('/api/eventos');
+    if (d.ok) { eventos = d.eventos; pintarEventos(); }
+  } catch (e) { manejarError(e, $('msgEvento'), 'No se pudo cargar la lista de eventos'); }
+}
+
+async function enviarEventos(msgOk) {
+  const msg = $('msgEvento');
+  try {
+    const d = await postJSON('/api/eventos', {eventos});
+    if (d.ok) {
+      eventos = d.eventos;
+      pintarEventos();
+      if (msgOk) { msg.className = 'msg ok'; msg.textContent = msgOk; }
+      return true;
+    }
+    msg.className = 'msg err'; msg.textContent = d.error || 'Error al guardar';
+    cargarEventos();
+  } catch (e) { manejarError(e, msg, 'Error de comunicación con el servidor'); }
+  return false;
+}
+
+function leerRutsTexto() {
+  const partes = $('eRuts').value.split(/[\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+  const ok = [], malos = [];
+  partes.forEach(p => { const v = rutValido(p); if (v) { if (!ok.includes(v)) ok.push(v); } else malos.push(p); });
+  return {ok, malos};
+}
+
+$('eRuts').addEventListener('input', () => {
+  const {ok, malos} = leerRutsTexto();
+  $('cuentaRuts').innerHTML = '· ' + ok.length + ' válidos' +
+    (malos.length ? ' · <span style="color:var(--red)">' + malos.length + ' inválidos</span>' : '');
+});
+
+async function guardarEvento() {
+  const msg = $('msgEvento');
+  const nombre = $('eNombre').value.trim();
+  const clave = $('eClave').value.trim();
+  const desde = $('eDesde').value, hasta = $('eHasta').value;
+  const {ok, malos} = leerRutsTexto();
+  msg.className = 'msg err';
+  if (!nombre) { msg.textContent = 'Ponle un nombre al evento'; return; }
+  if (!clave) { msg.textContent = 'Define la clave del evento'; return; }
+  if (desde && hasta && hasta <= desde) { msg.textContent = 'La fecha "Hasta" debe ser posterior a "Desde"'; return; }
+  if (malos.length) { msg.textContent = 'Estos RUT no son válidos: ' + malos.slice(0, 8).join(', ') + (malos.length > 8 ? '…' : ''); return; }
+  if (!ok.length) { msg.textContent = 'Agrega al menos un RUT autorizado'; return; }
+  const datos = {nombre, clave, desde, hasta, ruts: ok};
+  if (editando) {
+    const i = eventos.findIndex(e => e.id === editando);
+    if (i >= 0) eventos[i] = Object.assign({}, eventos[i], datos);
+  } else {
+    eventos.push(Object.assign({id: 'e' + Date.now(), activo: true}, datos));
+  }
+  const fueEdicion = !!editando;
+  if (await enviarEventos(fueEdicion ? 'Evento actualizado' : 'Evento creado')) limpiarFormEvento(true);
+}
+
+function editarEvento(idx) {
+  const e = eventos[idx];
+  editando = e.id;
+  $('tituloEvento').textContent = 'Editar evento';
+  $('eNombre').value = e.nombre;
+  $('eClave').value = e.clave;
+  $('eDesde').value = e.desde || '';
+  $('eHasta').value = e.hasta || '';
+  $('eRuts').value = e.ruts.map(formatoRut).join('\n');
+  $('eRuts').dispatchEvent(new Event('input'));
+  $('btnCancelarEd').hidden = false;
+  $('msgEvento').textContent = '';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function limpiarFormEvento(conservarMsg) {
+  editando = null;
+  $('tituloEvento').textContent = 'Nuevo evento';
+  $('eNombre').value = ''; $('eClave').value = '13';
+  $('eDesde').value = ''; $('eHasta').value = ''; $('eRuts').value = '';
+  $('cuentaRuts').textContent = '';
+  $('btnCancelarEd').hidden = true;
+  if (conservarMsg !== true) $('msgEvento').textContent = '';
+}
+
+/* ================= Aperturas ================= */
+
+async function cargarAperturas() {
+  const tb = $('listaAperturas');
+  try {
+    const d = await api('/api/aperturas');
+    if (!d.ok) return;
+    if (!d.aperturas.length) { tb.innerHTML = '<tr><td colspan="5" class="vacio">Todavía no hay intentos de apertura.</td></tr>'; return; }
+    tb.innerHTML = d.aperturas.map(a => {
+      const rut = rutValido(a.rut) ? formatoRut(a.rut) : a.rut;
+      return `<tr><td>${esc(a.fecha)}</td><td>${esc(rut)}</td><td>${esc(a.evento || '—')}</td>
+        <td class="${a.ok ? 'ok-t' : 'err-t'}">${a.ok ? '✔ Abrió' : esc(a.detalle)}</td>
+        <td style="color:var(--muted);font-size:.8rem">${esc(a.ip)}</td></tr>`;
+    }).join('');
+  } catch (e) { manejarError(e, null); }
+}
+
+/* ================= Ajustes ================= */
+
+async function cargarConfig() {
+  try {
+    const d = await api('/api/config');
+    if (d.ok) { $('cRele').value = d.config.rele_porton; $('cPulso').value = d.config.pulso_seg; }
+  } catch (e) { manejarError(e, $('msgConfig'), 'No se pudo cargar'); }
+}
+
+async function guardarConfig() {
+  const msg = $('msgConfig');
+  try {
+    const d = await postJSON('/api/config', {rele_porton: parseInt($('cRele').value), pulso_seg: parseFloat($('cPulso').value)});
+    msg.className = d.ok ? 'msg ok' : 'msg err';
+    msg.textContent = d.ok ? 'Guardado' : (d.error || 'Error al guardar');
+  } catch (e) { manejarError(e, msg, 'Error de comunicación con el servidor'); }
+}
+
+/* ================= Relés (control manual) ================= */
 
 for (let i = 1; i <= NUM_RELES; i++) {
   const card = document.createElement('div');
@@ -329,29 +717,23 @@ for (let i = 1; i <= NUM_RELES; i++) {
     <h2>Relé ${i}</h2>
     <button class="switch" onclick="conmutar(${i}, this)" aria-label="Conmutar relé ${i}"></button>
     <div class="estado">—</div>`;
-  grid.appendChild(card);
+  $('grid').appendChild(card);
 }
 
 function pintar(estados) {
   for (let i = 1; i <= NUM_RELES; i++) {
-    const card = document.getElementById('rele' + i);
+    const card = $('rele' + i);
     const est = estados && estados[String(i)];
     const label = card.querySelector('.estado');
-    if (!est || est.on === null) {
-      card.classList.remove('on');
-      label.textContent = 'desconocido';
-    } else if (est.on) {
-      card.classList.add('on');
-      label.textContent = 'ENCENDIDO';
-    } else {
-      card.classList.remove('on');
-      label.textContent = 'apagado';
-    }
+    if (!est || est.on === null) { card.classList.remove('on'); label.textContent = 'desconocido'; }
+    else if (est.on) { card.classList.add('on'); label.textContent = 'ENCENDIDO'; }
+    else { card.classList.remove('on'); label.textContent = 'apagado'; }
   }
 }
 
 async function refrescar() {
   if (!auth) return;
+  const dot = $('dot'), conTexto = $('conTexto'), aviso = $('aviso');
   try {
     const d = await api('/api/status');
     if (d.ok) {
@@ -359,9 +741,8 @@ async function refrescar() {
       conTexto.textContent = 'Conectado';
       aviso.textContent = '';
       pintar(d.reles);
-      if (d.hora) document.getElementById('horaSrv').textContent =
-        (d.dia || '') + ' ' + (d.fecha || '') + ' · ' + d.hora;
-      document.getElementById('ipDisp').textContent = d.dispositivo_ip || '—';
+      if (d.hora) $('horaSrv').textContent = (d.dia || '') + ' ' + (d.fecha || '') + ' · ' + d.hora;
+      $('ipDisp').textContent = d.dispositivo_ip || '—';
     } else {
       dot.className = 'dot err';
       conTexto.textContent = 'El módulo no está conectado';
@@ -369,27 +750,21 @@ async function refrescar() {
       let txt = d.error || '';
       if (d.modulo_desde) txt += ' · última conexión: ' + d.modulo_desde;
       aviso.textContent = txt;
-      document.getElementById('ipDisp').textContent = 'sin conectar';
+      $('ipDisp').textContent = 'sin conectar';
     }
   } catch (e) {
     dot.className = 'dot err';
     conTexto.textContent = 'Sin conexión con el servidor';
-    manejarError(e, aviso, '');
+    manejarError(e, null);
   }
 }
 
 async function mandar(rele, action) {
+  const aviso = $('aviso');
   try {
-    const d = await api('/api/set', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({rele, action})
-    });
-    if (!d.ok) aviso.textContent = 'El relé ' + rele + ' no respondió: ' + (d.error || d.raw || 'sin respuesta');
-    else aviso.textContent = '';
-  } catch (e) {
-    manejarError(e, aviso, 'Error de comunicación con el servidor');
-  }
+    const d = await postJSON('/api/set', {rele, action});
+    aviso.textContent = d.ok ? '' : 'El relé ' + rele + ' no respondió: ' + (d.error || d.raw || 'sin respuesta');
+  } catch (e) { manejarError(e, null); aviso.textContent = 'Error de comunicación con el servidor'; }
 }
 
 async function conmutar(rele, btn) {
@@ -404,41 +779,30 @@ async function todos(action) {
   await refrescar();
 }
 
-/* ---------- Programación horaria ---------- */
+/* ================= Programación horaria ================= */
 
 let programas = [];
 
-const fDias = document.getElementById('fDias');
 DIAS_NOMBRE.forEach((n, i) => {
   const b = document.createElement('button');
-  b.type = 'button';
-  b.className = 'dia';
-  b.textContent = n;
-  b.dataset.dia = i;
+  b.type = 'button'; b.className = 'dia'; b.textContent = n; b.dataset.dia = i;
   b.onclick = () => b.classList.toggle('sel');
-  fDias.appendChild(b);
+  $('fDias').appendChild(b);
 });
 
 function pintarProgramas() {
-  const tbody = document.getElementById('listaProg');
+  const tbody = $('listaProg');
   tbody.innerHTML = '';
-  if (!programas.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="vacio">No hay programas. Añade uno arriba.</td></tr>';
-    return;
-  }
+  if (!programas.length) { tbody.innerHTML = '<tr><td colspan="6" class="vacio">No hay programas. Añade uno arriba.</td></tr>'; return; }
   programas.forEach((p, idx) => {
     const tr = document.createElement('tr');
     if (!p.activo) tr.className = 'inactivo';
     const dias = p.dias.map(d => '<span class="tag-dia">' + DIAS_NOMBRE[d] + '</span>').join('');
     tr.innerHTML = `
-      <td><b>Relé ${Number(p.rele)}</b></td>
-      <td>${dias}</td>
-      <td class="hON"></td>
-      <td class="hOFF"></td>
+      <td><b>Relé ${Number(p.rele)}</b></td><td>${dias}</td>
+      <td class="hON">${esc(p.encender || '—')}</td><td class="hOFF">${esc(p.apagar || '—')}</td>
       <td><button class="mini pausa">${p.activo ? 'Pausar' : 'Activar'}</button></td>
       <td><button class="mini borrar">Borrar</button></td>`;
-    tr.querySelector('.hON').textContent = p.encender || '—';
-    tr.querySelector('.hOFF').textContent = p.apagar || '—';
     tr.querySelector('.pausa').onclick = () => { programas[idx].activo = !programas[idx].activo; guardarProgramas(); };
     tr.querySelector('.borrar').onclick = () => { programas.splice(idx, 1); guardarProgramas(); };
     tbody.appendChild(tr);
@@ -449,50 +813,35 @@ async function cargarProgramas() {
   try {
     const d = await api('/api/horarios');
     if (d.ok) { programas = d.horarios; pintarProgramas(); }
-  } catch (e) { manejarError(e, avisoProg, ''); }
+  } catch (e) { manejarError(e, $('avisoProg'), ''); }
 }
 
 async function guardarProgramas() {
+  const avisoProg = $('avisoProg');
   try {
-    const d = await api('/api/horarios', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({horarios: programas})
-    });
-    if (d.ok) {
-      programas = d.horarios;
-      avisoProg.textContent = '';
-      pintarProgramas();
-    } else {
-      avisoProg.textContent = d.error || 'Error al guardar';
-      cargarProgramas();
-    }
-  } catch (e) {
-    manejarError(e, avisoProg, 'Error de comunicación con el servidor');
-  }
+    const d = await postJSON('/api/horarios', {horarios: programas});
+    if (d.ok) { programas = d.horarios; avisoProg.textContent = ''; pintarProgramas(); }
+    else { avisoProg.textContent = d.error || 'Error al guardar'; cargarProgramas(); }
+  } catch (e) { manejarError(e, avisoProg, 'Error de comunicación con el servidor'); }
 }
 
 function agregarPrograma() {
-  const rele = parseInt(document.getElementById('fRele').value);
-  const dias = [...fDias.querySelectorAll('.dia.sel')].map(b => parseInt(b.dataset.dia));
-  const enc = document.getElementById('fEnc').value;
-  const apg = document.getElementById('fApg').value;
+  const avisoProg = $('avisoProg');
+  const rele = parseInt($('fRele').value);
+  const dias = [...$('fDias').querySelectorAll('.dia.sel')].map(b => parseInt(b.dataset.dia));
+  const enc = $('fEnc').value, apg = $('fApg').value;
   if (!dias.length) { avisoProg.textContent = 'Selecciona al menos un día de la semana'; return; }
   if (!enc && !apg) { avisoProg.textContent = 'Pon una hora de encendido, de apagado, o ambas'; return; }
-  programas.push({
-    id: 'p' + Date.now(),
-    rele, dias, encender: enc, apagar: apg, activo: true
-  });
+  programas.push({id: 'p' + Date.now(), rele, dias, encender: enc, apagar: apg, activo: true});
   guardarProgramas();
-  fDias.querySelectorAll('.dia.sel').forEach(b => b.classList.remove('sel'));
-  document.getElementById('fEnc').value = '';
-  document.getElementById('fApg').value = '';
+  $('fDias').querySelectorAll('.dia.sel').forEach(b => b.classList.remove('sel'));
+  $('fEnc').value = ''; $('fApg').value = '';
 }
 
-/* ---------- Arranque ---------- */
+/* ================= Arranque ================= */
 
 auth = leerAuth();
-if (auth) iniciar(); else mostrarLogin();
+if (location.hash === '#admin') irAdmin(); else mostrar('vistaAbrir');
 </script>
 </body>
 </html>
