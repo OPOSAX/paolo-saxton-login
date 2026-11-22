@@ -63,7 +63,7 @@
   .tarjeta h1 { text-align: center; font-size: 1.7rem; }
   .tarjeta .sub { margin-bottom: 0; }
   .grande { font-size: 1.15rem !important; padding: 12px 14px !important; text-align: center; letter-spacing: .03em; }
-  #btnAbrir, #btnCerrar { padding: 15px; font-size: 1.1rem; }
+  #btnAbrir { padding: 15px; font-size: 1.1rem; }
   .tarjeta [hidden] { display: none !important; }
   #resAbrir { min-height: 1.4em; text-align: center; font-size: .95rem; }
   #resAbrir.ok { color: var(--green); font-weight: 700; font-size: 1.1rem; }
@@ -203,8 +203,7 @@
       <label for="aClave">Clave</label>
       <input type="password" id="aClave" class="grande" autocomplete="off" required autofocus>
     </div>
-    <button class="btn prim" id="btnAbrir" type="submit">Abrir portón</button>
-    <button class="btn prim" id="btnCerrar" type="button" hidden>Cerrar portón</button>
+    <button class="btn prim" id="btnAbrir" type="submit">Activar portón</button>
     <div id="resAbrir"></div>
   </form>
   <div class="pie"><a href="#admin" onclick="irAdmin(); return false;">Administración</a></div>
@@ -382,36 +381,35 @@ function irAdmin() {
 
 /* ================= Vista pública ================= */
 
-// Paso 1: clave + "Abrir". Si abre, se cambia a "Cerrar" (otro pulso con la misma clave).
-function modoCerrar(si) {
+// Clave + "Activar portón" (un pulso: el portón abre, cierra o se detiene).
+// Tras la primera activación se oculta la clave y queda solo el botón,
+// para volver a activarlo sin escribirla de nuevo.
+function ocultarClave(si) {
   $('campoClave').hidden = si;
   $('subAbrir').hidden = si;
-  $('btnAbrir').hidden = si;
-  $('btnCerrar').hidden = !si;
 }
 
-async function enviarPorton(accion) {
-  const res = $('resAbrir');
-  const btn = accion === 'cerrar' ? $('btnCerrar') : $('btnAbrir');
+async function activarPorton() {
+  const res = $('resAbrir'), btn = $('btnAbrir');
   const clave = $('aClave').value.trim();
-  if (!clave) { res.className = 'err'; res.textContent = 'Escribe la clave'; modoCerrar(false); return; }
+  if (!clave) { res.className = 'err'; res.textContent = 'Escribe la clave'; ocultarClave(false); return; }
   btn.disabled = true;
-  res.className = ''; res.textContent = accion === 'cerrar' ? 'Cerrando…' : 'Abriendo…';
+  res.className = ''; res.textContent = 'Activando…';
   try {
     const r = await fetch(API + '/api/abrir', {
       method: 'POST', cache: 'no-store',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({clave, accion})
+      body: JSON.stringify({clave})
     });
     const d = await r.json();
     if (d.ok) {
       res.className = 'ok';
-      res.textContent = '✔ ' + (d.mensaje || (accion === 'cerrar' ? 'Portón cerrándose' : 'Portón abierto'));
-      modoCerrar(accion !== 'cerrar');
+      res.textContent = '✔ ' + (d.mensaje || 'Portón activado');
+      ocultarClave(true);
     } else {
       res.className = 'err';
-      res.textContent = d.error || 'No se pudo enviar la orden';
-      if (accion === 'cerrar' && /clave/i.test(d.error || '')) modoCerrar(false);
+      res.textContent = d.error || 'No se pudo activar';
+      if (/clave/i.test(d.error || '') && !/correcta/i.test(d.error || '')) ocultarClave(false);
     }
   } catch (e) {
     res.className = 'err';
@@ -421,8 +419,7 @@ async function enviarPorton(accion) {
   }
 }
 
-$('formAbrir').addEventListener('submit', (ev) => { ev.preventDefault(); enviarPorton('abrir'); });
-$('btnCerrar').addEventListener('click', () => enviarPorton('cerrar'));
+$('formAbrir').addEventListener('submit', (ev) => { ev.preventDefault(); activarPorton(); });
 
 /* ================= Sesión admin ================= */
 
@@ -650,7 +647,7 @@ async function cargarAperturas() {
     if (!d.aperturas.length) { tb.innerHTML = '<tr><td colspan="4" class="vacio">Todavía no hay intentos de apertura.</td></tr>'; return; }
     tb.innerHTML = d.aperturas.map(a => {
       return `<tr><td>${esc(a.fecha)}</td><td>${esc(a.evento || '—')}</td>
-        <td class="${a.ok ? 'ok-t' : 'err-t'}">${a.ok ? (a.detalle === 'cerrado' ? '✔ Cerró' : '✔ Abrió') : esc(a.detalle)}</td>
+        <td class="${a.ok ? 'ok-t' : 'err-t'}">${a.ok ? ({cerrado: '✔ Cerró', activado: '✔ Activó'}[a.detalle] || '✔ Abrió') : esc(a.detalle)}</td>
         <td style="color:var(--muted);font-size:.8rem">${esc(a.ip)}</td></tr>`;
     }).join('');
   } catch (e) { manejarError(e, null); }
