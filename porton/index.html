@@ -327,7 +327,7 @@
   <section class="seccion" id="tab-ajustes" hidden>
     <div class="panel">
       <h2>Apertura del portón</h2>
-      <div class="nota">Cuando alguien abre con la clave de un evento, el servidor enciende este relé durante los segundos indicados y luego lo apaga (como apretar el botón del portón).</div>
+      <div class="nota">Cuando alguien abre con la clave de un evento, el servidor enciende este relé durante los segundos indicados y luego lo apaga (como apretar el botón del portón). La <b>llave maestra</b> activa el portón siempre, aunque no haya ningún evento vigente (distingue mayúsculas y minúsculas).</div>
       <div class="form-prog" style="margin-bottom:0">
         <div class="campo" style="flex:0 1 160px"><label for="cRele">Relé del portón</label>
           <select id="cRele">
@@ -338,6 +338,8 @@
         </div>
         <div class="campo" style="flex:0 1 160px"><label for="cPulso">Pulso (segundos)</label>
           <input type="number" id="cPulso" min="0.5" max="30" step="0.5" value="2"></div>
+        <div class="campo" style="flex:1 1 200px"><label for="cMaestra">Llave maestra</label>
+          <input type="text" id="cMaestra" maxlength="40" autocomplete="off" placeholder="Vacía = desactivada"></div>
         <button class="btn prim" onclick="guardarConfig()">Guardar</button>
       </div>
       <div class="msg" id="msgConfig"></div>
@@ -658,14 +660,18 @@ async function cargarAperturas() {
 async function cargarConfig() {
   try {
     const d = await api('/api/config');
-    if (d.ok) { $('cRele').value = d.config.rele_porton; $('cPulso').value = d.config.pulso_seg; }
+    if (d.ok) {
+      $('cRele').value = d.config.rele_porton; $('cPulso').value = d.config.pulso_seg;
+      $('cMaestra').value = d.config.clave_maestra || '';
+    }
   } catch (e) { manejarError(e, $('msgConfig'), 'No se pudo cargar'); }
 }
 
 async function guardarConfig() {
   const msg = $('msgConfig');
   try {
-    const d = await postJSON('/api/config', {rele_porton: parseInt($('cRele').value), pulso_seg: parseFloat($('cPulso').value)});
+    const d = await postJSON('/api/config', {rele_porton: parseInt($('cRele').value), pulso_seg: parseFloat($('cPulso').value),
+                                              clave_maestra: $('cMaestra').value.trim()});
     msg.className = d.ok ? 'msg ok' : 'msg err';
     msg.textContent = d.ok ? 'Guardado' : (d.error || 'Error al guardar');
   } catch (e) { manejarError(e, msg, 'Error de comunicación con el servidor'); }
