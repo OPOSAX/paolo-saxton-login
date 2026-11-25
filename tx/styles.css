@@ -303,3 +303,21 @@ h1::after { content: ""; display: block; width: 48px; height: 3px; background: v
 .auth-card h1::after { margin-left: auto; margin-right: auto; }
 table thead th { background: #111111; color: #fff; text-transform: uppercase; font-size: .75rem; letter-spacing: .4px; }
 .footer-brand { text-align: center; color: #A5A5A5; font-size: .78rem; padding: 1.2rem 0 1.6rem; }
+
+/* Qué hacer ahora (Resumen) y texto de acción por documento */
+.que-hacer { border-left: 4px solid var(--accent, #C8102E); }
+.qh-list { margin: 0; padding-left: 1.4em; }
+.qh { margin: 0 0 .7em; line-height: 1.4; }
+.qh strong { display: block; }
+.qh .qh-txt { display: block; color: #444; font-size: .92em; }
+.qh a { font-size: .9em; }
+.qh.urgente strong { color: var(--accent, #C8102E); }
+.qh-tag { display: inline-block; background: var(--accent, #C8102E); color: #fff; font-size: .72em; font-weight: bold;
+  letter-spacing: .04em; text-transform: uppercase; padding: .1em .5em; border-radius: 3px; margin-bottom: .2em; }
+.accion.urgente { color: var(--accent, #C8102E); font-weight: bold; }
+.accion.ok { color: #555; }
+.accion-row td { padding-top: 0 !important; border-top: 0 !important; font-size: .9em; white-space: normal; }
+.accion-row .accion { display: block; color: #444; padding-left: .2em; }
+.accion-row.urgente .accion { color: var(--accent, #C8102E); font-weight: bold; }
+tr:has(+ tr.accion-row) td { border-bottom: 0 !important; padding-bottom: .25em; }
+tbody tr:hover + tr.accion-row td, tbody tr:has(+ tr.accion-row:hover) td { background: #f8fafc; }

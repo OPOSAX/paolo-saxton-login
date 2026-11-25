@@ -835,6 +835,16 @@
       });
       var html = pageHead('Resumen', 'Cómo va la facturación y la cobranza de todos tus clientes.',
         '<a class="btn secondary" href="#/banco">Subir cartolas</a><button type="button" class="btn" id="addClientBtn">Agregar cliente</button>');
+      var qh = list(d.que_hacer, 'que_hacer');
+      html += '<section class="card que-hacer" aria-labelledby="qhTitle"><div class="card-head"><h2 id="qhTitle">Qué hacer ahora</h2>' +
+        '<span class="muted small">En orden de urgencia</span></div>' +
+        (qh.length ? '<ol class="qh-list">' + qh.map(function (q) {
+          var href = /^#\//.test(q.link || '') ? q.link : '';
+          return '<li class="qh ' + (q.nivel === 'urgente' ? 'urgente' : 'pendiente') + '">' +
+            (q.nivel === 'urgente' ? '<span class="qh-tag">Urgente</span>' : '') +
+            '<strong>' + esc(q.titulo) + '</strong><span class="qh-txt">' + esc(q.texto || '') + '</span>' +
+            (href ? '<a href="' + esc(href) + '">Ver</a>' : '') + '</li>';
+        }).join('') + '</ol>' : '<p class="muted">Nada pendiente. Todo en orden.</p>') + '</section>';
       html += '<div class="stats">' +
         statCard({ label: 'Facturado (12 meses)', value: esc(clp(t.facturado)), desc: 'Total facturado en los últimos 12 meses.', kind: 'info', href: '#/documentos' }) +
         statCard({ label: 'Pagado (12 meses)', value: esc(clp(t.pagado)), desc: 'Pagos ya asignados a tus facturas.', kind: 'ok', href: '#/banco' }) +
@@ -1042,7 +1052,11 @@
         '<td class="opt"><div class="tag-list">' + hes.map(function (h) { return '<span class="tag">' + esc(h) + '</span>'; }).join('') + '</div></td>' +
         '<td class="opt">' + siiChip(d.sii_evento) + '</td>' +
         '<td class="desc opt">' + esc(d.notes || '') + '</td>' +
-        '<td class="actions"><button type="button" class="btn small secondary" data-edit-doc="' + esc(d.id) + '" aria-label="Editar ' + esc(docLabel(d)) + '">Editar</button></td></tr>';
+        '<td class="actions"><button type="button" class="btn small secondary" data-edit-doc="' + esc(d.id) + '" aria-label="Editar ' + esc(docLabel(d)) + '">Editar</button></td></tr>' +
+        // qué hacer: línea propia bajo la factura, solo si hay algo que hacer
+        (d.accion && !isNC && (d.accion_nivel === 'urgente' || d.accion_nivel === 'pendiente')
+          ? '<tr class="accion-row ' + esc(d.accion_nivel) + (String(opts.highlight) === String(d.id) ? ' row-highlight' : '') + '"><td colspan="' + cols + '"><span class="accion ' + esc(d.accion_nivel) + '">' +
+            (d.accion_nivel === 'urgente' ? 'Urgente · ' : 'Qué hacer · ') + esc(d.accion) + '</span></td></tr>' : '');
     });
     html += '</tbody>';
     if (docs.length > 1) html += '<tfoot><tr><td colspan="' + (opts.showClient ? 5 : 4) + '">Total (sin notas de crédito)</td><td class="num">' + esc(clp(tt)) +
@@ -1214,6 +1228,7 @@
           '<dt>Fecha</dt><dd>' + esc(fdate(d.fecha)) + (d.periodo ? ' <span class="muted">(período tributario ' + esc(fmes(d.periodo)) + ')</span>' : '') + '</dd>' +
           '<dt>Montos</dt><dd>Neto ' + esc(clp(d.neto)) + ' · Exento ' + esc(clp(d.exento)) + ' · IVA ' + esc(clp(d.iva)) + ' · <strong>Total ' + esc(clp(d.total)) + '</strong></dd>' +
           (+d.tipo !== 61 ? '<dt>Estado</dt><dd>' + chip(d.estado, d) + ' · Pagado ' + esc(clp(d.pagado)) + ' · Saldo ' + esc(clp(d.saldo)) + '</dd>' : '') +
+          (d.accion && +d.tipo !== 61 ? '<dt>Qué hacer</dt><dd class="accion ' + esc(d.accion_nivel || '') + '">' + esc(d.accion) + '</dd>' : '') +
           (d.ref_folio ? '<dt>Referencia</dt><dd>' + esc(tipoNombre(d.ref_tipo)) + ' ' + esc(d.ref_folio) + ' · ' + esc(REF_CODIGOS[+d.ref_codigo] || '') + '</dd>' : '') +
           (d.glosa ? '<dt>Glosa</dt><dd>' + esc(d.glosa) + '</dd>' : '') +
           '</dl>';
