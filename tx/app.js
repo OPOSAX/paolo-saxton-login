@@ -138,12 +138,13 @@
     anulada: ['Anulada', 'muted'],
     cedida: ['Cedida (factoring)', 'info']
   };
-  var CONCEPTOS = ['servicio mensual', 'proyecto', 'emergencia', 'horas extra', 'otro'];
+  var CONCEPTOS = ['servicio mensual', 'proyecto', 'trabajo puntual', 'emergencia', 'horas extra', 'otro'];
   var REF_CODIGOS = { 1: 'Anula el documento', 2: 'Corrige texto', 3: 'Corrige monto' };
   var SII_EVENTOS = { '': 'Sin respuesta del cliente', A: 'Aceptada por el cliente', R: 'Reclamada (rechazada) por el cliente' };
 
   function chip(estado, doc) {
     if (doc && +doc.tipo === 61) return '<span class="chip nc">Nota de crédito</span>';
+    if (estado === 'reclamada_sin_nc' && doc && +doc.solo_anular) return '<span class="chip bad" title="Duplicada o ya cobrada con otra factura: solo se anula con NC, no se vuelve a facturar">Falta NC (solo anular)</span>';
     var e = ESTADOS[estado];
     if (!e) return estado ? '<span class="chip muted">' + esc(estado) + '</span>' : '';
     return '<span class="chip ' + e[1] + '">' + esc(e[0]) + '</span>';
@@ -838,7 +839,7 @@
         statCard({ label: 'Facturado (12 meses)', value: esc(clp(t.facturado)), desc: 'Total facturado en los últimos 12 meses.', kind: 'info', href: '#/documentos' }) +
         statCard({ label: 'Pagado (12 meses)', value: esc(clp(t.pagado)), desc: 'Pagos ya asignados a tus facturas.', kind: 'ok', href: '#/banco' }) +
         statCard({ label: 'Deuda total', value: esc(clp(t.deuda)), desc: 'Lo que los clientes te deben hoy (pendiente + pago parcial).', kind: 'warn', href: '#/documentos?estado=pendiente%2Cparcial' }) +
-        statCard({ label: 'Por re-facturar', value: esc(clp(t.rechazado_por_refacturar)), desc: 'Facturas reclamadas: hay que anularlas con NC y facturar de nuevo.', kind: 'bad', href: '#/documentos?estado=reclamada_sin_nc' }) +
+        statCard({ label: 'Por re-facturar', value: esc(clp(t.rechazado_por_refacturar)), desc: 'Facturas reclamadas que hay que anular con NC y facturar de nuevo.' + (num(t.solo_anular) ? ' Aparte, ' + clp(t.solo_anular) + ' en duplicadas que solo se anulan.' : ''), kind: 'bad', href: '#/documentos?estado=reclamada_sin_nc' }) +
         statCard({ label: 'NC pendientes', value: countOrAmount(t.nc_pendientes), desc: 'Notas de crédito que faltan por emitir.', kind: 'bad', href: '#/documentos?estado=reclamada_sin_nc' }) +
         statCard({ label: 'IVA en riesgo', value: esc(clp(t.iva_en_riesgo)), desc: 'IVA de facturas reclamadas que puedes recuperar.', kind: 'bad', href: '#/iva' }) +
         (t.abonos_sin_asignar !== undefined ? statCard({ label: 'Pagos sin asignar', value: esc(entero(t.abonos_sin_asignar)) + (isNum(t.monto_sin_asignar) ? ' <small class="muted">(' + esc(clp(t.monto_sin_asignar)) + ')</small>' : ''),
@@ -1063,7 +1064,7 @@
     return jsonList(src).map(function (a) {
       if (a && typeof a === 'object') {
         var lbl = (TIPO_CORTO[+a.tipo] || 'F') + ' ' + (a.folio !== undefined ? a.folio : (a.document_folio !== undefined ? a.document_folio : '#' + (a.document_id || '?')));
-        return { label: lbl, amount: a.amount !== undefined ? a.amount : a.monto, id: a.id };
+        return { label: lbl, amount: a.amount !== undefined ? a.amount : a.monto, id: a.id, anticipo: !!+a.anticipo };
       }
       return { label: 'F ' + a };
     });
@@ -1098,7 +1099,7 @@
       var deuda = 0, refact = 0, pagadoTot = 0, ncPend = 0;
       facturas.forEach(function (x) {
         if (x.estado === 'pendiente' || x.estado === 'parcial') deuda += num(x.saldo);
-        if (x.estado === 'reclamada_sin_nc') { refact += num(x.total); ncPend += 1; }
+        if (x.estado === 'reclamada_sin_nc') { if (!+x.solo_anular) refact += num(x.total); ncPend += 1; }
         pagadoTot += num(x.pagado);
       });
       if (isNum(c.deuda)) deuda = num(c.deuda);
@@ -1168,7 +1169,7 @@
         var f = paymentFolios(p);
         var monto = p.monto !== undefined ? p.monto : (p.abono !== undefined ? p.abono : p.amount);
         html += '<tr><td class="nowrap">' + esc(fdate(p.fecha)) + '</td><td class="num">' + esc(clp(monto)) + '</td><td class="desc">' + esc(p.descripcion || p.glosa || '') + '</td>' +
-          '<td>' + (f.length ? f.map(function (x) { return '<span class="alloc">' + esc(x.label) + (isNum(x.amount) ? ' · ' + esc(clp(x.amount)) : '') + '</span>'; }).join('') : '<span class="muted">Sin asignar</span>') + '</td></tr>';
+          '<td>' + (f.length ? f.map(function (x) { return '<span class="alloc">' + esc(x.label) + (isNum(x.amount) ? ' · ' + esc(clp(x.amount)) : '') + (x.anticipo ? ' · <span title="Pago recibido antes de emitir la factura">Anticipo</span>' : '') + '</span>'; }).join('') : '<span class="muted">Sin asignar</span>') + '</td></tr>';
       });
       html += '</tbody></table></div></section>';
 
@@ -1224,6 +1225,8 @@
         fld({ label: 'HES', name: 'hes', value: jsonList(d.hes).join(', '), help: 'Si son varias, sepáralas con coma.' }) +
         fld({ label: 'Respuesta del cliente en el SII', name: 'sii_evento', type: 'select', value: d.sii_evento || '', options: [['', 'Sin respuesta'], ['A', 'Aceptada'], ['R', 'Reclamada (rechazada)']] }) +
         fld({ label: 'Factura cedida (factoring)', name: 'cedida', type: 'checkbox', value: d.cedida, help: 'Si la cediste, el cliente le paga a la empresa de factoring.' }) +
+        fld({ label: 'Requiere nota de crédito (duplicada o mal emitida)', name: 'requiere_nc', type: 'checkbox', value: d.requiere_nc, help: 'Márcala si esta factura no se va a cobrar y hay que anularla con NC aunque el cliente no la haya reclamado.' }) +
+        fld({ label: 'Solo anular (no se vuelve a facturar)', name: 'solo_anular', type: 'checkbox', value: d.solo_anular, help: 'Duplicada o ya cobrada con otra factura: se anula con NC y no suma a lo que falta re-facturar.' }) +
         fld({ label: 'Cesionario (a quién se cedió)', name: 'cesionario', value: d.cesionario }) +
         (isNew ? fld({ label: 'Glosa / detalle', name: 'glosa', type: 'textarea', value: d.glosa, full: true }) : '') +
         fld({ label: 'Notas internas', name: 'notes', type: 'textarea', value: d.notes, full: true }) +
@@ -1291,7 +1294,7 @@
         var f = readForm(form);
         var common = {
           servicio_mes: f.servicio_mes || null, concepto: f.concepto || null, oc: f.oc || null,
-          hes: splitList(f.hes), notes: f.notes || null, sii_evento: f.sii_evento || '', cedida: f.cedida, cesionario: f.cesionario || null
+          hes: splitList(f.hes), notes: f.notes || null, sii_evento: f.sii_evento || '', cedida: f.cedida, requiere_nc: f.requiere_nc, solo_anular: f.solo_anular, cesionario: f.cesionario || null
         };
         var payload, method, path;
         if (isNew) {
@@ -1573,7 +1576,7 @@
           else status = '<span class="chip warn">Sin asignar</span>';
           var allocHtml = allocs.map(function (a) {
             var lbl = (TIPO_CORTO[+a.tipo] || 'F') + ' ' + (a.folio !== undefined ? a.folio : '#' + a.document_id);
-            return '<span class="alloc">' + esc(lbl) + ' · ' + esc(clp(a.amount)) +
+            return '<span class="alloc">' + esc(lbl) + ' · ' + esc(clp(a.amount)) + (+a.anticipo ? ' · Anticipo' : '') +
               (a.id !== undefined ? '<button type="button" class="x-btn" data-unalloc="' + esc(a.id) + '" aria-label="Quitar asignación ' + esc(lbl) + '" title="Quitar">×</button>' : '') + '</span>';
           }).join('');
           h += '<tr class="' + (ign ? 'row-ignored' : '') + '"><td class="nowrap">' + esc(fdate(m.fecha)) + (m.cuenta ? '<span class="sub">Cta ' + esc(m.cuenta) + '</span>' : '') + '</td>' +
@@ -1681,7 +1684,7 @@
       return { docs: docs, total: sum, tipo: tipo };
     }).filter(function (o) { return o.docs.length; });
   }
-  var OPT_TIPOS = { exacto: 'Coincide exacto', combinacion: 'Suma de varias facturas', parcial: 'Pago parcial' };
+  var OPT_TIPOS = { exacto: 'Coincide exacto', combinacion: 'Suma de varias facturas', parcial: 'Pago parcial', anticipo: 'Anticipo (factura emitida después del pago)' };
   function optionsHtml(opts, prefix) {
     if (!opts.length) return '<p class="muted">No hay facturas que sumen exactamente este monto. Puedes marcarlas a mano abajo.</p>';
     return '<div class="options">' + opts.map(function (o, i) {
