@@ -1155,7 +1155,7 @@
         var MS_EST = {
           ok: ['OK', 'ok'], por_cobrar: ['Por cobrar', 'warn'], cedida: ['Cedida', 'info'],
           falta_refacturar: ['Falta re-facturar', 'bad'], falta_facturar: ['Sin factura', 'bad'],
-          incompleto: ['Falta una factura', 'bad'], monto_menor: ['Monto menor', 'warn'], de_mas: ['Monto mayor', 'warn'], sin_dato: ['Sin UF', 'muted']
+          incompleto: ['Falta una factura', 'bad'], monto_menor: ['Monto menor', 'warn'], duplicada: ['Reclamada duplicada', 'info'], de_mas: ['Monto mayor', 'warn'], sin_dato: ['Sin UF', 'muted']
         };
         var esUf = msr.unidad === 'UF';
         var cant = function (v, signo) {
