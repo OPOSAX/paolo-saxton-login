@@ -1149,6 +1149,39 @@
         '</dl></section>';
 
       // Resumen mensual
+      // Meses de servicio del contrato mensual: ¿cada mes quedó facturado completo y pagado?
+      var ms = list(c.meses_servicio, 'meses_servicio'), msr = c.meses_servicio_resumen || {};
+      if (ms.length) {
+        var MS_EST = {
+          ok: ['OK', 'ok'], por_cobrar: ['Por cobrar', 'warn'], cedida: ['Cedida', 'info'],
+          falta_refacturar: ['Falta re-facturar', 'bad'], falta_facturar: ['Sin factura', 'bad'],
+          incompleto: ['Falta una factura', 'bad'], monto_menor: ['Monto menor', 'warn'], de_mas: ['Monto mayor', 'warn'], sin_dato: ['Sin UF', 'muted']
+        };
+        var esUf = msr.unidad === 'UF';
+        var cant = function (v, signo) {
+          if (v === null || v === undefined || v === '') return '—';
+          var n = num(v);
+          var t = esUf ? n.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' UF' : clp(Math.round(n));
+          return (signo && n > 0 ? '+' : '') + t;
+        };
+        html += '<section class="card" aria-labelledby="msTitle"><h2 id="msTitle">Meses de servicio</h2>' +
+          (msr.texto ? '<p class="qh-intro">' + esc(msr.texto) + '</p>' : '') +
+          '<p class="help">Cada fila es un mes del contrato. Cuenta solo las facturas vigentes de servicio mensual (no las anuladas ni las reclamadas)' +
+          (esUf ? ', convertidas a UF con la UF del día de emisión' : '') + '. "Diferencia" compara con el contrato; en los meses por re-facturar cuenta lo reclamado como si se volviera a facturar igual.</p>' +
+          '<div class="table-wrap"><table><thead><tr><th scope="col">Mes</th><th scope="col" class="num">Contrato</th><th scope="col" class="num">Facturado vigente</th>' +
+          '<th scope="col" class="num">Por re-facturar</th><th scope="col" class="num">Diferencia</th><th scope="col">Estado</th><th scope="col">Detalle</th></tr></thead><tbody>';
+        ms.forEach(function (r) {
+          var e = MS_EST[r.estado] || [r.estado || '—', 'muted'];
+          var dif = r.diferencia === null || r.diferencia === undefined ? null : num(r.diferencia);
+          var difBad = dif !== null && Math.abs(dif) > (esUf ? 0.05 : 1);
+          html += '<tr><td class="nowrap">' + esc(fmes(r.mes)) + '</td><td class="num">' + esc(cant(r.contrato)) + '</td><td class="num">' + esc(cant(r.facturado)) +
+            '</td><td class="num">' + (num(r.por_refacturar) ? '<strong class="text-bad">' + esc(cant(r.por_refacturar)) + '</strong>' : '—') +
+            '</td><td class="num">' + (difBad ? '<strong class="text-bad">' + esc(cant(dif, true)) + '</strong>' : (dif === null ? '—' : 'OK')) +
+            '</td><td><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span></td><td class="desc">' + esc(r.detalle || '') + '</td></tr>';
+        });
+        html += '</tbody></table></div></section>';
+      }
+
       html += '<section class="card" aria-labelledby="rmTitle"><h2 id="rmTitle">Resumen por mes</h2>' +
         '<p class="help">Cada fila es un mes de servicio: cuánto se facturó, cuánto se descontó con notas de crédito, cuánto se pagó, cuánto falta cobrar y cuánto está reclamado (hay que anularlo con NC y volver a facturar).</p>' +
         '<div class="table-wrap"><table><thead><tr><th scope="col">Mes</th><th scope="col" class="num">Facturado</th><th scope="col" class="num">Notas de crédito</th>' +
@@ -1241,6 +1274,7 @@
       }
       body += '<div class="form-grid">' +
         fld({ label: 'Mes del servicio', name: 'servicio_mes', type: 'month', value: d.servicio_mes || (d.periodo || ''), help: 'El mes que se está cobrando (puede ser distinto a la fecha de la factura).' }) +
+        fld({ label: 'Hasta (si cobra varios meses)', name: 'servicio_hasta', type: 'month', value: d.servicio_hasta || '', help: 'Solo si la factura cobra varios meses juntos, por ejemplo febrero y marzo. Si no, déjalo vacío.' }) +
         fld({ label: 'Concepto', name: 'concepto', type: 'select', value: d.concepto || '', options: [['', '—']].concat(CONCEPTOS.map(function (x) { return [x, x.charAt(0).toUpperCase() + x.slice(1)]; })) }) +
         fld({ label: 'Orden de compra (OC)', name: 'oc', value: d.oc }) +
         fld({ label: 'HES', name: 'hes', value: jsonList(d.hes).join(', '), help: 'Si son varias, sepáralas con coma.' }) +
@@ -1314,7 +1348,7 @@
         ev.preventDefault();
         var f = readForm(form);
         var common = {
-          servicio_mes: f.servicio_mes || null, concepto: f.concepto || null, oc: f.oc || null,
+          servicio_mes: f.servicio_mes || null, servicio_hasta: f.servicio_hasta || null, concepto: f.concepto || null, oc: f.oc || null,
           hes: splitList(f.hes), notes: f.notes || null, sii_evento: f.sii_evento || '', cedida: f.cedida, requiere_nc: f.requiere_nc, solo_anular: f.solo_anular, cesionario: f.cesionario || null
         };
         var payload, method, path;
