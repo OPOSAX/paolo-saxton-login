@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data:; connect-src https://porton-api.paolosaxton.com https://tx-api.paolosaxton.com http://127.0.0.1:8100 http://localhost:8100; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="theme-color" content="#111111">
+  <title>BizNet · Facturación y cobranza</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main" id="skipLink">Saltar al contenido</a>
+
+  <header class="topbar" id="topbar" hidden>
+    <div class="topbar-inner">
+      <a class="brand" href="#/dashboard" aria-label="BizNet, ir al resumen">
+        <img class="logo" src="assets/biznet-icon-blanco.png" alt="" width="32" height="30">
+        <span class="brand-name">BIZNET</span>
+        <span class="brand-text">Facturación y cobranza</span>
+      </a>
+      <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="mainnav">Menú</button>
+      <nav id="mainnav" class="mainnav" aria-label="Menú principal">
+        <a href="#/dashboard" data-nav="dashboard">Resumen</a>
+        <a href="#/clientes" data-nav="clientes">Clientes</a>
+        <a href="#/documentos" data-nav="documentos">Documentos</a>
+        <a href="#/banco" data-nav="banco">Banco</a>
+        <a href="#/iva" data-nav="iva">IVA</a>
+        <a href="#/ajustes" data-nav="ajustes">Ajustes</a>
+        <span class="nav-user">
+          <span id="userName" class="user-name"></span>
+          <button type="button" id="logoutBtn" class="btn small ghost-light">Salir</button>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <div id="view" class="view"></div>
+  </main>
+  <footer class="footer-brand">BizNet IT Tecnologías de Información · Uso interno confidencial</footer>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <noscript><p class="noscript">Esta aplicación necesita JavaScript activado.</p></noscript>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
