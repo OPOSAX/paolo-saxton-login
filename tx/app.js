@@ -1595,7 +1595,8 @@
               (a.id !== undefined ? '<button type="button" class="x-btn" data-unalloc="' + esc(a.id) + '" aria-label="Quitar asignación ' + esc(lbl) + '" title="Quitar">×</button>' : '') + '</span>';
           }).join('');
           h += '<tr class="' + (ign ? 'row-ignored' : '') + '"><td class="nowrap">' + esc(fdate(m.fecha)) + (m.cuenta ? '<span class="sub">Cta ' + esc(m.cuenta) + '</span>' : '') + '</td>' +
-            '<td class="desc">' + esc(m.descripcion || '') + (m.payer_rut ? '<span class="sub">RUT ' + esc(m.payer_rut) + '</span>' : '') + '</td>' +
+            '<td class="desc">' + esc(m.descripcion || '') + (m.payer_rut ? '<span class="sub">RUT ' + esc(m.payer_rut) + '</span>' : '') +
+              (m.notes ? '<span class="sub mov-nota">' + esc(m.notes) + '</span>' : '') + '</td>' +
             '<td class="opt">' + esc(m.documento || '') + '</td>' +
             '<td class="num">' + (num(m.cargo) ? esc(clp(m.cargo)) : '') + '</td>' +
             '<td class="num">' + (ab ? '<strong>' + esc(clp(ab)) + '</strong>' : '') + '</td>' +
@@ -1740,6 +1741,8 @@
     var rem = movRemaining(m);
     var changed = false;
     var body = '<dl class="kv"><dt>Fecha</dt><dd>' + esc(fdate(m.fecha)) + '</dd><dt>Descripción</dt><dd>' + esc(m.descripcion || '—') + (m.documento ? ' · Doc ' + esc(m.documento) : '') + '</dd>' +
+      (m.payer_rut ? '<dt>RUT de quien pagó</dt><dd>' + esc(m.payer_rut) + '</dd>' : '') +
+      (m.notes ? '<dt>Nota</dt><dd>' + esc(m.notes) + '</dd>' : '') +
       '<dt>Monto del abono</dt><dd><strong>' + esc(clp(m.abono)) + '</strong></dd>' +
       (movAssigned(m) > 0 ? '<dt>Ya asignado</dt><dd>' + esc(clp(movAssigned(m))) + '</dd>' : '') +
       '<dt>Por asignar</dt><dd><strong>' + esc(clp(rem)) + '</strong></dd></dl>' +
