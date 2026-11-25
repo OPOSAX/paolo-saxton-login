@@ -825,6 +825,20 @@
   var NIVEL_ORD = { roja: 0, amarilla: 1, info: 2 };
   var NIVEL_TXT = { roja: 'Urgente', amarilla: 'Atención', info: 'Aviso' };
 
+  // Recuadro "Qué hacer" (Resumen y ficha de cliente). Los links solo pueden ser rutas internas (#/...).
+  function queHacerBox(qh, titulo, intro, vacio) {
+    return '<section class="card que-hacer" aria-labelledby="qhTitle"><div class="card-head"><h2 id="qhTitle">' + esc(titulo) + '</h2>' +
+      '<span class="muted small">En orden de urgencia</span></div>' +
+      (intro ? '<p class="qh-intro">' + esc(intro) + '</p>' : '') +
+      (qh.length ? '<ol class="qh-list">' + qh.map(function (q) {
+        var href = /^#\//.test(q.link || '') ? q.link : '';
+        return '<li class="qh ' + (q.nivel === 'urgente' ? 'urgente' : 'pendiente') + '">' +
+          (q.nivel === 'urgente' ? '<span class="qh-tag">Urgente</span>' : '') +
+          '<strong>' + esc(q.titulo) + '</strong><span class="qh-txt">' + esc(q.texto || '') + '</span>' +
+          (href ? '<a href="' + esc(href) + '">Ver</a>' : '') + '</li>';
+      }).join('') + '</ol>' : '<p class="muted">' + esc(vacio || 'Nada pendiente. Todo en orden.') + '</p>') + '</section>';
+  }
+
   function viewDashboard(ctx) {
     return Promise.all([api('GET', '/api/dashboard'), getClients().catch(function () { return []; })]).then(function (res) {
       if (ctx.stale()) return;
@@ -835,16 +849,7 @@
       });
       var html = pageHead('Resumen', 'Cómo va la facturación y la cobranza de todos tus clientes.',
         '<a class="btn secondary" href="#/banco">Subir cartolas</a><button type="button" class="btn" id="addClientBtn">Agregar cliente</button>');
-      var qh = list(d.que_hacer, 'que_hacer');
-      html += '<section class="card que-hacer" aria-labelledby="qhTitle"><div class="card-head"><h2 id="qhTitle">Qué hacer ahora</h2>' +
-        '<span class="muted small">En orden de urgencia</span></div>' +
-        (qh.length ? '<ol class="qh-list">' + qh.map(function (q) {
-          var href = /^#\//.test(q.link || '') ? q.link : '';
-          return '<li class="qh ' + (q.nivel === 'urgente' ? 'urgente' : 'pendiente') + '">' +
-            (q.nivel === 'urgente' ? '<span class="qh-tag">Urgente</span>' : '') +
-            '<strong>' + esc(q.titulo) + '</strong><span class="qh-txt">' + esc(q.texto || '') + '</span>' +
-            (href ? '<a href="' + esc(href) + '">Ver</a>' : '') + '</li>';
-        }).join('') + '</ol>' : '<p class="muted">Nada pendiente. Todo en orden.</p>') + '</section>';
+      html += queHacerBox(list(d.que_hacer, 'que_hacer'), 'Qué hacer ahora', '');
       html += '<div class="stats">' +
         statCard({ label: 'Facturado (12 meses)', value: esc(clp(t.facturado)), desc: 'Total facturado en los últimos 12 meses.', kind: 'info', href: '#/documentos' }) +
         statCard({ label: 'Pagado (12 meses)', value: esc(clp(t.pagado)), desc: 'Pagos ya asignados a tus facturas.', kind: 'ok', href: '#/banco' }) +
@@ -1130,6 +1135,7 @@
         statCard({ label: 'Pagado (histórico)', value: esc(clp(pagadoTot)), desc: 'Pagos asignados a sus facturas.', kind: 'ok' }) +
         statCard({ label: 'Monto mensual', value: esc(fmonto(c)), desc: 'Según contrato.', kind: 'info' }) +
         '</div>';
+      if (c.que_hacer !== undefined) html += queHacerBox(list(c.que_hacer, 'que_hacer'), 'Qué hacer con ' + name, c.que_hacer_intro || '', 'Nada pendiente con este cliente.');
 
       // Datos del cliente
       var pats = jsonList(c.payer_patterns);

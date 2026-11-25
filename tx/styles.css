@@ -308,6 +308,7 @@ table thead th { background: #111111; color: #fff; text-transform: uppercase; fo
 /* Qué hacer ahora (Resumen) y texto de acción por documento */
 .que-hacer { border-left: 4px solid var(--accent, #C8102E); }
 .qh-list { margin: 0; padding-left: 1.4em; }
+.qh-intro { margin: 0 0 .6rem; font-weight: 600; }
 .qh { margin: 0 0 .7em; line-height: 1.4; }
 .qh strong { display: block; }
 .qh .qh-txt { display: block; color: #444; font-size: .92em; }
