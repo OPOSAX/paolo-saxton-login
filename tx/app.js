@@ -1284,6 +1284,7 @@
         fld({ label: 'Solo anular (no se vuelve a facturar)', name: 'solo_anular', type: 'checkbox', value: d.solo_anular, help: 'Duplicada o ya cobrada con otra factura: se anula con NC y no suma a lo que falta re-facturar.' }) +
         fld({ label: 'Cesionario (a quién se cedió)', name: 'cesionario', value: d.cesionario }) +
         (isNew ? fld({ label: 'Glosa / detalle', name: 'glosa', type: 'textarea', value: d.glosa, full: true }) : '') +
+        fld({ label: 'Volver a facturar con', name: 'refacturar_con', type: 'textarea', value: d.refacturar_con, full: true, help: 'Solo si esta factura se anula y se reemplaza: monto (UF), OC (Referencias tipo 801) y HES de la factura nueva.' }) +
         fld({ label: 'Notas internas', name: 'notes', type: 'textarea', value: d.notes, full: true }) +
         '</div>';
 
@@ -1349,7 +1350,7 @@
         var f = readForm(form);
         var common = {
           servicio_mes: f.servicio_mes || null, servicio_hasta: f.servicio_hasta || null, concepto: f.concepto || null, oc: f.oc || null,
-          hes: splitList(f.hes), notes: f.notes || null, sii_evento: f.sii_evento || '', cedida: f.cedida, requiere_nc: f.requiere_nc, solo_anular: f.solo_anular, cesionario: f.cesionario || null
+          hes: splitList(f.hes), notes: f.notes || null, refacturar_con: f.refacturar_con || null, sii_evento: f.sii_evento || '', cedida: f.cedida, requiere_nc: f.requiere_nc, solo_anular: f.solo_anular, cesionario: f.cesionario || null
         };
         var payload, method, path;
         if (isNew) {
