@@ -1084,8 +1084,8 @@
       if (docs.length > 1) html += '<tr><td colspan="' + (opts.showClient ? 6 : 5) + '">Total (sin notas de crédito)</td><td class="num">' + esc(clp(tt)) +
         '</td><td></td><td class="num">' + esc(clp(tp)) + '</td><td class="num">' + esc(clp(ts)) + '</td><td colspan="5"></td></tr>';
       // la suma de lo que te deben, siempre visible al final de la lista
-      html += '<tr class="total-te-deben"><td colspan="' + (opts.showClient ? 9 : 8) + '"><strong>Te deben</strong> (saldo por cobrar de estas facturas)</td>' +
-        '<td class="num"><strong>' + esc(clp(ts)) + '</strong></td><td colspan="5"></td></tr></tfoot>';
+      html += '<tr class="total-te-deben"><td colspan="' + cols + '"><strong>Te deben: ' + esc(clp(ts)) + '</strong>' +
+        ' <span class="muted">(saldo por cobrar de ' + esc(entero(docs.filter(function (x) { return +x.tipo !== 61 && num(x.saldo) > 0; }).length)) + ' factura(s) de esta lista)</span></td></tr></tfoot>';
     }
     return html + '</table></div>';
   }
