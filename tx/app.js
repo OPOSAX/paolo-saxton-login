@@ -853,7 +853,7 @@
       html += '<div class="stats">' +
         statCard({ label: 'Facturado (12 meses)', value: esc(clp(t.facturado)), desc: 'Total facturado en los últimos 12 meses.', kind: 'info', href: '#/documentos' }) +
         statCard({ label: 'Pagado (12 meses)', value: esc(clp(t.pagado)), desc: 'Pagos ya asignados a tus facturas.', kind: 'ok', href: '#/banco' }) +
-        statCard({ label: 'Deuda total', value: esc(clp(t.deuda)), desc: 'Lo que los clientes te deben hoy (pendiente + pago parcial).', kind: 'warn', href: '#/documentos?estado=pendiente%2Cparcial' }) +
+        statCard({ label: 'Te deben', value: esc(clp(t.deuda)), desc: 'Lo que tus clientes te deben hoy: facturas pendientes y con pago parcial. Haz clic para ver el detalle.', kind: 'warn', href: '#/documentos?estado=pendiente%2Cparcial' }) +
         statCard({ label: 'Por re-facturar', value: esc(clp(t.rechazado_por_refacturar)), desc: 'Facturas reclamadas que hay que anular con NC y facturar de nuevo.' + (num(t.solo_anular) ? ' Aparte, ' + clp(t.solo_anular) + ' en duplicadas que solo se anulan.' : ''), kind: 'bad', href: '#/documentos?estado=reclamada_sin_nc' }) +
         statCard({ label: 'NC pendientes', value: countOrAmount(t.nc_pendientes), desc: 'Notas de crédito que faltan por emitir.', kind: 'bad', href: '#/documentos?estado=reclamada_sin_nc' }) +
         statCard({ label: 'IVA en riesgo', value: esc(clp(t.iva_en_riesgo)), desc: 'IVA de facturas reclamadas que puedes recuperar.', kind: 'bad', href: '#/iva' }) +
@@ -882,7 +882,7 @@
       html += '<section class="card" aria-labelledby="clTitle"><div class="card-head"><h2 id="clTitle">Clientes</h2>' +
         '<span class="muted small">Haz clic en un cliente para ver su detalle.</span></div>' +
         '<div class="table-wrap"><table class="tbl-opt"><thead><tr><th scope="col">Cliente</th><th scope="col" class="num opt">Facturado 12 meses</th>' +
-        '<th scope="col" class="num opt">Pagado 12 meses</th><th scope="col" class="num">Deuda</th><th scope="col" class="num">Facturas por cobrar</th>' +
+        '<th scope="col" class="num opt">Pagado 12 meses</th><th scope="col" class="num">Te debe</th><th scope="col" class="num">Facturas por cobrar</th>' +
         '<th scope="col" class="num">Reclamadas</th><th scope="col">Último pago</th></tr></thead><tbody>';
       if (!clientes.length) html += emptyRow(7, 'Aún no hay clientes. Agrega uno o importa el Registro de Ventas del SII en Ajustes.');
       var tot = { f: 0, p: 0, d: 0 };
@@ -1021,12 +1021,26 @@
   /* ======================================================================
    * 4. Cliente (detalle)
    * ==================================================================== */
+  // días desde la emisión; en rojo si la factura sigue con saldo y pasaron más de 30 días
+  function diasDesde(fecha) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fecha || ''));
+    if (!m) return null;
+    var hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    var f = new Date(+m[1], +m[2] - 1, +m[3]);
+    return Math.max(0, Math.round((hoy - f) / 86400000));
+  }
+  function diasCell(d, isNC) {
+    var n = diasDesde(d.fecha);
+    if (n === null || isNC) return '<td class="num"></td>';
+    var vencida = num(d.saldo) > 0 && n > 30;
+    return '<td class="num nowrap' + (vencida ? ' dias-vencida' : '') + '"' + (vencida ? ' title="Más de 30 días sin pagar"' : '') + '>' + esc(entero(n)) + '</td>';
+  }
   function docsTable(docs, opts) {
     opts = opts || {};
-    var cols = opts.showClient ? 14 : 13;
+    var cols = opts.showClient ? 15 : 14;
     var html = '<div class="table-wrap"><table class="tbl-opt"><thead><tr>' +
       (opts.showClient ? '<th scope="col">Cliente</th>' : '') +
-      '<th scope="col">Documento</th><th scope="col">Fecha</th><th scope="col" class="opt">Mes servicio</th><th scope="col" class="opt">Concepto</th>' +
+      '<th scope="col">Documento</th><th scope="col">Fecha de emisión</th><th scope="col" class="num" title="Días desde la fecha de emisión">Días</th><th scope="col" class="opt">Mes servicio</th><th scope="col" class="opt">Concepto</th>' +
       '<th scope="col" class="num">Total</th><th scope="col">Estado</th><th scope="col" class="num opt">Pagado</th><th scope="col" class="num">Saldo</th>' +
       '<th scope="col" class="opt">OC</th><th scope="col" class="opt">HES</th><th scope="col" class="opt">SII</th><th scope="col" class="opt">Notas</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead><tbody>';
     if (!docs.length) html += emptyRow(cols, opts.emptyText || 'No hay documentos.');
@@ -1047,6 +1061,7 @@
         refs.map(function (r) { return '<span class="sub">' + esc(r) + '</span>'; }).join('') +
         ncs.map(function (r) { return '<span class="sub">Anulada/ajustada por ' + esc(r) + '</span>'; }).join('') + '</td>' +
         '<td class="nowrap">' + esc(fdate(d.fecha)) + '</td>' +
+        diasCell(d, isNC) +
         '<td class="nowrap opt">' + esc(fmes(d.servicio_mes || d.periodo)) + '</td>' +
         '<td class="opt">' + esc(d.concepto || '') + '</td>' +
         '<td class="num">' + esc(clp(isNC ? -Math.abs(num(d.total)) : d.total)) + '</td>' +
@@ -1064,8 +1079,14 @@
             (d.accion_nivel === 'urgente' ? 'Urgente · ' : 'Qué hacer · ') + esc(d.accion) + '</span></td></tr>' : '');
     });
     html += '</tbody>';
-    if (docs.length > 1) html += '<tfoot><tr><td colspan="' + (opts.showClient ? 5 : 4) + '">Total (sin notas de crédito)</td><td class="num">' + esc(clp(tt)) +
-      '</td><td></td><td class="num">' + esc(clp(tp)) + '</td><td class="num">' + esc(clp(ts)) + '</td><td colspan="5"></td></tr></tfoot>';
+    if (docs.length) {
+      html += '<tfoot>';
+      if (docs.length > 1) html += '<tr><td colspan="' + (opts.showClient ? 6 : 5) + '">Total (sin notas de crédito)</td><td class="num">' + esc(clp(tt)) +
+        '</td><td></td><td class="num">' + esc(clp(tp)) + '</td><td class="num">' + esc(clp(ts)) + '</td><td colspan="5"></td></tr>';
+      // la suma de lo que te deben, siempre visible al final de la lista
+      html += '<tr class="total-te-deben"><td colspan="' + (opts.showClient ? 9 : 8) + '"><strong>Te deben</strong> (saldo por cobrar de estas facturas)</td>' +
+        '<td class="num"><strong>' + esc(clp(ts)) + '</strong></td><td colspan="5"></td></tr></tfoot>';
+    }
     return html + '</table></div>';
   }
   function bindDocsTable(root, docs, onChange) {
@@ -1130,7 +1151,7 @@
         '<a class="back" href="#/dashboard">← Volver al resumen</a>');
 
       html += '<div class="stats">' +
-        statCard({ label: 'Deuda', value: esc(clp(deuda)), desc: 'Facturas pendientes de pago.', kind: 'warn' }) +
+        statCard({ label: 'Te debe', value: esc(clp(deuda)), desc: 'Lo que este cliente te debe hoy (facturas pendientes y con pago parcial).', kind: 'warn' }) +
         statCard({ label: 'Por re-facturar', value: esc(clp(refact)), desc: ncPend ? ncPend + ' factura(s) reclamada(s): falta emitir NC.' : 'Sin facturas reclamadas.', kind: refact ? 'bad' : 'ok' }) +
         statCard({ label: 'Pagado (histórico)', value: esc(clp(pagadoTot)), desc: 'Pagos asignados a sus facturas.', kind: 'ok' }) +
         statCard({ label: 'Monto mensual', value: esc(fmonto(c)), desc: 'Según contrato.', kind: 'info' }) +

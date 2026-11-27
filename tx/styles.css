@@ -292,7 +292,7 @@ tr.hidden { display: none; }
 /* ---------- Celular: columnas secundarias ocultas ---------- */
 @media (max-width: 600px) {
   .opt { display: none; }
-  .tbl-opt tfoot { display: none; }
+  .tbl-opt tfoot tr:not(.total-te-deben) { display: none; }
   td.desc { min-width: 140px; }
 }
 
@@ -323,3 +323,7 @@ table thead th { background: #111111; color: #fff; text-transform: uppercase; fo
 .accion-row.urgente .accion { color: var(--accent, #C8102E); font-weight: bold; }
 tr:has(+ tr.accion-row) td { border-bottom: 0 !important; padding-bottom: .25em; }
 tbody tr:hover + tr.accion-row td, tbody tr:has(+ tr.accion-row:hover) td { background: #f8fafc; }
+
+/* total "Te deben" al final de las listas de documentos */
+tfoot tr.total-te-deben td { background: #fff5f6; color: var(--accent, #C8102E); font-size: 1.05em; }
+td.dias-vencida { color: var(--accent, #C8102E); font-weight: 700; background: #fff5f6; }
