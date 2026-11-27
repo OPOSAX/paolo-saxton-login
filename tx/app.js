@@ -498,6 +498,7 @@
     { re: /^#\/clientes$/, view: viewClients, nav: 'clientes', title: 'Clientes' },
     { re: /^#\/cliente\/(\d+)$/, view: viewClient, nav: 'clientes', title: 'Cliente' },
     { re: /^#\/recurrentes$/, view: viewRecurrentes, nav: 'recurrentes', title: 'Recurrentes' },
+    { re: /^#\/por-facturar$/, view: viewPorFacturar, nav: 'por-facturar', title: 'Por facturar' },
     { re: /^#\/documentos$/, view: viewDocuments, nav: 'documentos', title: 'Documentos' },
     { re: /^#\/banco$/, view: viewBank, nav: 'banco', title: 'Banco' },
     { re: /^#\/iva$/, view: viewIva, nav: 'iva', title: 'IVA' },
@@ -1295,6 +1296,8 @@
 
       // Servicios recurrentes: control mes a mes de lo que se factura todos los meses
       html += recurrentesSeccion(c, c.id || id);
+      // Por facturar: lo que falta emitir a este cliente (se carga aparte para no demorar la ficha)
+      html += pfClienteSeccion();
 
       // Resumen mensual
       // Meses de servicio del contrato mensual: ¿cada mes quedó facturado completo y pagado?
@@ -1382,6 +1385,7 @@
       $('#newDocBtn').addEventListener('click', function () { openDocDialog(null, rerenderKeepScroll, c.id || id); });
       bindDocsTable(viewEl, docs, rerenderKeepScroll);
       bindRecurrentes(viewEl, list(c.recurrentes), c.id || id, rerenderKeepScroll);
+      loadPfCliente(c.id || id, ctx);
       if (ctx.query.doc) {
         var row = document.getElementById('doc-' + ctx.query.doc);
         if (row) setTimeout(function () { row.scrollIntoView({ block: 'center' }); }, 50);
@@ -1699,6 +1703,295 @@
       $('#recAddBtn').addEventListener('click', function () { openRecDialog(null, null, rerenderKeepScroll); });
       $('#chkRecInact').addEventListener('change', function (e) { go('#/recurrentes' + (e.target.checked ? '?inactivos=1' : '')); });
       bindRecSelectores(viewEl, rerenderKeepScroll);
+    });
+  }
+
+  /* ======================================================================
+   * Por facturar: facturas que hay que emitir en un mes o año (recurrentes + anotadas a mano)
+   * ==================================================================== */
+  var PF_EST = {
+    atrasada: ['Atrasada', 'bad'],
+    por_emitir: ['Por emitir', 'warn'],
+    esperando: ['Esperando', 'info'],
+    duplicado: ['Facturas de más', 'bad'],
+    emitida: ['Emitida', 'ok'],
+    descartada: ['Descartada', 'muted']
+  };
+  function pfChip(it) {
+    var e = PF_EST[it.estado] || [it.estado || '—', 'muted'];
+    return '<span class="chip ' + e[1] + '">' + esc(e[0]) + '</span>';
+  }
+  function pfPeriodo(it) {
+    if (it.origen !== 'recurrente') return '<span class="muted">Proyecto o trabajo puntual</span>';
+    var t = (it.periodicidad === 'anual' ? 'Renovación ' : 'Servicio ') + fmesLargo(it.servicio_mes);
+    var sub = [];
+    if (it.hito) sub.push('Hito ' + it.hito + (it.total_hitos ? ' de ' + it.total_hitos : ''));
+    if (num(it.facturas_por_mes) > 1) sub.push(it.facturas_por_mes + ' facturas al mes');
+    return esc(t) + (sub.length ? '<span class="sub">' + esc(sub.join(' · ')) + '</span>' : '');
+  }
+  function pfVence(it) {
+    var f = it.vence || it.vence_efectivo;
+    var html = esc(fdate(f));
+    if (!it.vence && it.vence_efectivo) html += '<span class="sub">Fin de mes</span>';
+    if (num(it.dias_atraso) > 0) html += '<span class="sub text-bad">' + esc(it.dias_atraso === 1 ? 'Hace 1 día' : 'Hace ' + it.dias_atraso + ' días') + '</span>';
+    return html;
+  }
+  // aceptación en el SII de una factura emitida (aceptada / reclamada / sin reclamo en 8 días / aún en plazo)
+  var PF_SII = { aceptada: ['Aceptada SII', 'ok'], sin_reclamo: ['Sin reclamo', 'ok'], en_plazo: ['Sin respuesta SII', 'muted'], reclamada: ['Reclamada SII', 'bad'], anulada: ['Anulada', 'muted'] };
+  function pfSii(d) {
+    var e = PF_SII[d.sii];
+    return e ? '<span class="chip ' + e[1] + '" title="' + esc(d.sii_txt || '') + '">' + esc(e[0]) + '</span>' : '';
+  }
+  function pfFolios(it) {
+    var out = list(it.folios).map(function (d) {
+      return '<span class="alloc" title="' + esc(tipoNombre(d.tipo) + ' emitida el ' + fdate(d.fecha)) + '">' + esc(docLabel(d)) + ' · ' + esc(fdate(d.fecha)) + '</span>' + pfSii(d);
+    }).join('');
+    if (it.cobro === 'pagado') out += '<span class="chip ok">Pagada</span>';
+    else if (it.cobro === 'por_cobrar') out += '<span class="chip warn">Por cobrar</span>';
+    if (it.estado === 'emitida' && it.emitida_por === 'sistema') out += '<span class="sub">Se marcó sola al llegar la factura.</span>';
+    if (it.espera && it.estado === 'esperando') out += '<span class="sub"><strong>Esperando:</strong> ' + esc(it.espera) + (it.vencida ? ' <span class="text-bad">(plazo vencido)</span>' : '') + '</span>';
+    if (list(it.sugerencias).length) out += '<span class="sub">Posible factura: ' + esc(list(it.sugerencias).map(docLabel).join(', ')) + ' (márcala con «Marcar emitida»).</span>';
+    if (it.estado === 'duplicado' && it.detalle) out += '<span class="sub">' + esc(it.detalle) + '</span>';
+    return out || '<span class="muted">—</span>';
+  }
+  function pfAcciones(it, enCliente) {
+    if (it.origen !== 'plan') {
+      return enCliente ? '' : '<a class="btn small secondary" href="#/cliente/' + esc(it.client_id) + '">Ver cliente</a>';
+    }
+    var id = esc(it.id), nom = esc(it.concepto || '');
+    var b = '<button type="button" class="btn small secondary" data-pf-edit="' + id + '" aria-label="Editar ' + nom + '">Editar</button>';
+    if (it.estado === 'emitida' || it.estado === 'descartada') {
+      b += '<button type="button" class="btn small secondary" data-pf-reabrir="' + id + '" aria-label="Reabrir ' + nom + '">Reabrir</button>';
+    } else {
+      b += '<button type="button" class="btn small" data-pf-emitir="' + id + '" aria-label="Marcar emitida ' + nom + '">Marcar emitida</button>' +
+        '<button type="button" class="btn link small" data-pf-descartar="' + id + '" aria-label="Descartar ' + nom + '">Descartar</button>';
+    }
+    return '<span class="btn-row">' + b + '</span>';
+  }
+  function pfTabla(items, opts) {
+    opts = opts || {};
+    var conCli = opts.conCliente !== false;
+    var cols = conCli ? 9 : 8;
+    var html = '<div class="table-wrap"><table class="pf-tabla"><thead><tr><th scope="col">Estado</th>' + (conCli ? '<th scope="col">Cliente</th>' : '') +
+      '<th scope="col">Concepto</th><th scope="col">Período de servicio / hito</th><th scope="col" class="num">Monto (neto)</th><th scope="col">OC</th>' +
+      '<th scope="col">Vence</th><th scope="col">Folio(s) / qué espera</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead><tbody>';
+    if (!items.length) html += emptyRow(cols, opts.empty || 'No hay facturas por emitir en este período.');
+    items.forEach(function (it) {
+      var cli = it.client_short || it.client_name || clientName(it.client_id);
+      var origen = it.origen === 'recurrente' ? 'Servicio recurrente' : 'Anotada a mano';
+      if (it.de_otro_mes || (opts.verMes && it.estado === 'atrasada')) origen += ' · se debía emitir en ' + fmesLargo(it.mes_facturar);
+      else if (opts.verMes) origen += ' · se emite en ' + fmesLargo(it.mes_facturar);
+      html += '<tr class="' + (it.de_otro_mes ? 'pf-otro-mes' : '') + (it.estado === 'descartada' ? ' row-ignored' : '') + '">' +
+        '<td>' + pfChip(it) + '</td>' +
+        (conCli ? '<td><a href="#/cliente/' + esc(it.client_id) + '">' + esc(cli) + '</a></td>' : '') +
+        '<td class="desc">' + esc(it.concepto || '') + '<span class="sub">' + esc(origen) + '</span>' + (it.notas ? '<span class="sub">' + esc(it.notas) + '</span>' : '') + '</td>' +
+        '<td>' + pfPeriodo(it) + '</td>' +
+        '<td class="num nowrap">' + esc(it.monto_txt || recMonto(it.monto, it.unidad)) +
+        (it.unidad !== 'CLP' && isNum(it.monto_clp) ? '<span class="sub">≈ ' + esc(clp(it.monto_clp)) + '</span>' : '') + '</td>' +
+        '<td class="nowrap">' + esc(it.oc || '—') + '</td>' +
+        '<td class="nowrap">' + pfVence(it) + '</td>' +
+        '<td>' + pfFolios(it) + '</td>' +
+        '<td class="actions">' + pfAcciones(it, opts.enCliente) + '</td></tr>';
+    });
+    return html + '</tbody></table></div>';
+  }
+  function bindPf(root, items, onDone, clientId) {
+    var byId = {};
+    items.forEach(function (it) { if (it.origen === 'plan') byId[it.id] = it; });
+    var estado = function (attr, valor, okMsg, pregunta) {
+      $$('[' + attr + ']', root).forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var it = byId[btn.getAttribute(attr)];
+          if (pregunta && !confirm(pregunta.replace('%s', it.concepto || ''))) return;
+          busy(btn, true);
+          api('PATCH', '/api/facturas-plan/' + encodeURIComponent(it.id), { estado: valor })
+            .then(function () { toast(okMsg, 'ok'); onDone(); })
+            .catch(function (e) { busy(btn, false); toastErr(e); });
+        });
+      });
+    };
+    estado('data-pf-descartar', 'descartada', 'Factura por emitir descartada.', '¿Descartar «%s»? Ya no se va a facturar. Puedes reabrirla después.');
+    estado('data-pf-reabrir', 'pendiente', 'Quedó pendiente otra vez.', '¿Reabrir «%s»? Vuelve a quedar por emitir (si estaba ligada a una factura, se suelta y no se vuelve a ligar sola).');
+    $$('[data-pf-edit]', root).forEach(function (b) {
+      b.addEventListener('click', function () { openPlanDialog(byId[b.getAttribute('data-pf-edit')], clientId, onDone); });
+    });
+    $$('[data-pf-emitir]', root).forEach(function (b) {
+      b.addEventListener('click', function () { openEmitirDialog(byId[b.getAttribute('data-pf-emitir')], onDone); });
+    });
+  }
+
+  // Formulario agregar / editar factura por emitir.
+  function openPlanDialog(it, clientId, onSaved, mesDefecto) {
+    getClients().catch(function () { return []; }).then(function () {
+      var isNew = !it;
+      var d = it || { unidad: 'UF', mes_facturar: mesDefecto || monthISO(0), client_id: clientId };
+      var montoTxt = isNum(d.monto) ? String(d.monto).replace('.', ',') : '';
+      var dlg = openDialog(isNew ? 'Agregar factura por emitir' : 'Editar factura por emitir',
+        '<form id="pfForm" novalidate><p class="help">Proyectos, hitos o trabajos puntuales que hay que facturar. Los servicios de todos los meses van en Recurrentes. Queda esperando hasta que llega su factura: se marca emitida sola si el neto calza con el monto.</p><div class="form-grid">' +
+        (clientId && isNew ? '' : fld({ label: 'Cliente', name: 'client_id', type: 'select', required: true, optionsHtml: clientOptions(d.client_id || '', 'Elige un cliente…') })) +
+        fld({ label: 'Qué se factura', name: 'concepto', value: d.concepto, required: true, full: true, placeholder: 'Ej: Hito 2 proyecto EPV, instalación de sensores' }) +
+        fld({ label: 'Monto (neto)', name: 'monto', value: montoTxt, required: true, attrs: 'inputmode="decimal"', help: 'Sin IVA. Ej: 120,5 UF o 1.500.000 pesos.' }) +
+        fld({ label: 'Unidad', name: 'unidad', type: 'select', value: d.unidad || 'UF', options: REC_UNIDADES }) +
+        fld({ label: 'Mes en que se factura', name: 'mes_facturar', type: 'month', value: d.mes_facturar, required: true }) +
+        fld({ label: 'Plazo para facturar (opcional)', name: 'vence', type: 'date', value: d.vence || '', help: 'Vacío = fin de ese mes.' }) +
+        fld({ label: 'Orden de compra (OC)', name: 'oc', value: d.oc }) +
+        fld({ label: 'Esperando a… (opcional)', name: 'espera', value: d.espera, placeholder: 'Ej: recepción conforme, HES, OC', help: 'Lo que falta para poder facturar. Mientras tenga texto, sale como «Esperando».' }) +
+        fld({ label: 'Notas', name: 'notas', type: 'textarea', value: d.notas, full: true }) +
+        '</div><div id="pfMsg"></div><div class="form-actions">' +
+        (isNew ? '' : '<button type="button" class="btn danger left" id="pfDelBtn">Eliminar</button>') +
+        '<button type="button" class="btn secondary" data-close>Cancelar</button>' +
+        '<button type="submit" class="btn">' + (isNew ? 'Agregar' : 'Guardar') + '</button></div></form>', { wide: true });
+      var form = $('#pfForm', dlg), msg = $('#pfMsg', dlg);
+      var del = $('#pfDelBtn', dlg);
+      if (del) del.addEventListener('click', function () {
+        if (!confirm('¿Eliminar «' + (it.concepto || '') + '»? Si solo ya no se va a facturar, mejor usa «Descartar».')) return;
+        busy(del, true);
+        api('DELETE', '/api/facturas-plan/' + encodeURIComponent(it.id)).then(function () {
+          dlg.close(); toast('Factura por emitir eliminada.', 'ok'); if (onSaved) onSaved(); else rerenderKeepScroll();
+        }).catch(function (e) { busy(del, false); showMsg(msg, e.message); });
+      });
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var f = readForm(form);
+        if (!f.concepto) { showMsg(msg, 'Escribe qué se va a facturar.'); return; }
+        var monto = parseMonto(f.monto);
+        if (monto === null || isNaN(monto) || monto <= 0) { showMsg(msg, 'El monto debe ser un número mayor que cero (ej. 120,5 o 1.500.000).'); return; }
+        if (!f.mes_facturar) { showMsg(msg, 'Indica el mes en que se factura.'); return; }
+        var body = { concepto: f.concepto, monto: monto, unidad: f.unidad, mes_facturar: f.mes_facturar, vence: f.vence || null, oc: f.oc || null, espera: f.espera || null, notas: f.notas || null };
+        var cid = f.client_id || (isNew ? clientId : null);
+        if (cid) body.client_id = cid;
+        if (isNew && !body.client_id) { showMsg(msg, 'Elige el cliente.'); return; }
+        var btn = $('button[type=submit]', form);
+        busy(btn, true, 'Guardando…');
+        api(isNew ? 'POST' : 'PATCH', isNew ? '/api/facturas-plan' : '/api/facturas-plan/' + encodeURIComponent(it.id), body).then(function () {
+          dlg.close();
+          toast(isNew ? 'Factura por emitir agregada.' : 'Cambios guardados.', 'ok');
+          if (onSaved) onSaved(); else rerenderKeepScroll();
+        }).catch(function (e) { busy(btn, false); showMsg(msg, e.message); });
+      });
+    });
+  }
+
+  // "Marcar emitida": elegir la factura (sugeridas primero) o escribir el folio.
+  function openEmitirDialog(it, onSaved) {
+    var dlg = openDialog('Marcar emitida: ' + (it.concepto || ''), '<div id="pfEmBody">' + loadingHtml('Buscando facturas del cliente…') + '</div>', { wide: true, noAutofocus: true });
+    var box = $('#pfEmBody', dlg);
+    api('GET', '/api/facturas-plan/' + encodeURIComponent(it.id) + '/candidatas').then(function (r) {
+      var fs = list(r && r.facturas);
+      var html = '<form id="pfEmForm" novalidate><p class="help">' + esc(it.client_short || it.client_name || clientName(it.client_id)) + ' · ' + esc(it.monto_txt || '') +
+        '. Elige la factura que la cubre. Solo aparecen facturas vigentes (no anuladas ni reclamadas en el SII) que no cubren otra factura por emitir.</p>';
+      if (fs.length) {
+        html += '<fieldset class="pf-cands-fs"><legend class="sr-only">Facturas del cliente</legend><ul class="pf-cands">' + fs.map(function (d, i) {
+          var rid = 'pfc' + i;
+          var tags = (d.sugerida ? '<span class="chip ok">Sugerida</span>' : (d.calza ? '<span class="chip info">Calza con el monto</span>' : '')) +
+            (d.recurrente ? '<span class="chip warn" title="Ya cuenta para un mes de este servicio recurrente">Es de ' + esc(d.recurrente) + '</span>' : '');
+          return '<li><label for="' + rid + '"><input type="radio" name="document_id" id="' + rid + '" value="' + esc(d.id) + '"' + (i === 0 && (d.sugerida || d.calza) ? ' checked' : '') + '>' +
+            '<span><strong>' + esc(docLabel(d)) + '</strong> · ' + esc(fdate(d.fecha)) + ' · neto ' + esc(clp(d.neto)) + ' ' + tags +
+            (d.glosa ? '<span class="sub">' + esc(d.glosa) + '</span>' : '') + '</span></label></li>';
+        }).join('') + '</ul></fieldset>';
+      } else {
+        html += '<p class="muted">Este cliente no tiene facturas disponibles en el sistema. Si recién la emitiste, importa el Registro de Ventas del SII: se marcará sola.</p>';
+      }
+      html += '<div class="form-grid">' + fld({ label: 'O escribe el folio', name: 'folio', type: 'number', attrs: 'min="1" step="1" inputmode="numeric"', help: fs.length ? 'Si escribes un folio, se usa ese en vez del marcado arriba.' : '' }) + '</div>' +
+        '<div id="pfEmMsg"></div><div class="form-actions"><button type="button" class="btn secondary" data-close>Cancelar</button><button type="submit" class="btn">Marcar emitida</button></div></form>';
+      box.innerHTML = html;
+      var form = $('#pfEmForm', dlg), msg = $('#pfEmMsg', dlg);
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var folio = ($('[name=folio]', form).value || '').trim();
+        var sel = $('input[name=document_id]:checked', form);
+        var body = { estado: 'emitida' };
+        if (folio) body.folio = folio; else if (sel) body.document_id = Number(sel.value);
+        else { showMsg(msg, 'Elige la factura o escribe su folio.'); return; }
+        var btn = $('button[type=submit]', form);
+        busy(btn, true, 'Guardando…');
+        api('PATCH', '/api/facturas-plan/' + encodeURIComponent(it.id), body).then(function () {
+          dlg.close(); toast('Marcada como emitida.', 'ok'); if (onSaved) onSaved(); else rerenderKeepScroll();
+        }).catch(function (e) { busy(btn, false); showMsg(msg, e.message); });
+      });
+    }).catch(function (e) { box.innerHTML = errorHtml(e); });
+  }
+
+  function viewPorFacturar(ctx) {
+    var q = ctx.query, cur = monthISO(0);
+    var anio = /^\d{4}$/.test(q.anio || '') ? q.anio : cur.slice(0, 4);
+    var mes = /^(0?[1-9]|1[0-2])$/.test(q.mes || '') ? String(+q.mes).padStart(2, '0') : '';
+    if (!q.anio && !q.mes) mes = cur.slice(5, 7);   // sin filtro: el mes actual
+    var verDesc = q.descartadas === '1';
+    var hashDe = function (a, m, d) { return '#/por-facturar' + qs({ anio: a, mes: m, descartadas: d ? 1 : '' }); };
+    return Promise.all([api('GET', '/api/por-facturar' + qs({ anio: anio, mes: mes, incluir_descartadas: verDesc ? 1 : '' })), getClients().catch(function () { return []; })]).then(function (res) {
+      if (ctx.stale()) return;
+      var d = res[0] || {}, t = d.totales || {}, items = list(d.items);
+      var periodo = mes ? fmesLargo(anio + '-' + mes) : 'todo ' + anio;
+      var html = pageHead('Por facturar', 'Las facturas que se deben emitir en el mes: servicios recurrentes y proyectos o trabajos anotados a mano. Quedan pendientes hasta que llega su factura.',
+        '<button type="button" class="btn" id="pfAddBtn">Agregar factura por emitir</button>');
+      var anios = [];
+      var a0 = +cur.slice(0, 4);
+      for (var y = a0 + 1; y >= a0 - 3; y--) anios.push(String(y));
+      if (anios.indexOf(anio) < 0) anios.push(anio);
+      html += '<div class="card"><form id="pfFiltros" class="filters" role="search" aria-label="Filtrar por año y mes">' +
+        fld({ label: 'Año', name: 'anio', type: 'select', value: anio, options: anios }) +
+        fld({ label: 'Mes', name: 'mes', type: 'select', value: mes, options: [['', 'Todo el año']].concat(MESES_LARGO.map(function (m, i) { return [String(i + 1).padStart(2, '0'), m.charAt(0).toUpperCase() + m.slice(1)]; })) }) +
+        fld({ label: 'Mostrar descartadas', name: 'descartadas', type: 'checkbox', value: verDesc ? 1 : 0 }) +
+        '<div class="btn-row">' + (mes ? '<button type="button" class="btn secondary small" id="pfPrev">← Mes anterior</button><button type="button" class="btn secondary small" id="pfNext">Mes siguiente →</button>' : '') +
+        ((anio + '-' + mes) !== cur ? '<button type="button" class="btn link small" id="pfHoy">Ir al mes actual</button>' : '') + '</div>' +
+        '</form></div>';
+      var sinConv = t.sin_convertir || {};
+      var aparte = Object.keys(sinConv).map(function (u) { return recMonto(sinConv[u], u); });
+      var montoDesc = 'Neto de lo que falta emitir (atrasadas, por emitir y esperando).' +
+        (num(t.monto_por_emitir_uf) && t.uf_valor ? ' UF convertida a ' + clp(t.uf_valor) + '.' : '') +
+        (aparte.length ? ' Aparte, sin convertir: ' + aparte.join(' + ') + (t.uf_valor ? '' : ' (no hay valor UF cargado)') + '.' : '');
+      html += '<div class="stats">' +
+        statCard({ label: 'Atrasadas', value: esc(entero(t.atrasada)), desc: 'Ya pasó el plazo y no se han emitido' + (num(t.de_otro_mes) ? ' (incluye ' + t.de_otro_mes + ' de meses anteriores).' : '.'), kind: num(t.atrasada) ? 'bad' : 'ok' }) +
+        statCard({ label: 'Por emitir', value: esc(entero(t.por_emitir)), desc: 'Dentro del plazo.', kind: num(t.por_emitir) ? 'warn' : 'ok' }) +
+        statCard({ label: 'Esperando', value: esc(entero(t.esperando)), desc: 'Falta algo para poder facturar (recepción conforme, HES, OC…).', kind: 'info' }) +
+        statCard({ label: 'Emitidas', value: esc(entero(t.emitida)), desc: num(t.monto_emitido_clp) ? 'Neto emitido: ' + clp(t.monto_emitido_clp) + '.' : 'Ya tienen su factura.', kind: 'ok' }) +
+        statCard({ label: 'Monto por emitir', value: esc(clp(t.monto_por_emitir_clp)), desc: montoDesc, kind: 'info' }) +
+        (num(t.duplicado) ? statCard({ label: 'Facturas de más', value: esc(entero(t.duplicado)), desc: 'Meses de un servicio con más facturas que las esperadas: revisa.', kind: 'bad' }) : '') +
+        '</div>';
+      html += '<section class="card" aria-labelledby="pfTitle"><h2 id="pfTitle">Facturas de ' + esc(periodo) + ' (' + esc(items.length) + ')</h2>' +
+        '<p class="help">Los servicios recurrentes salen en el mes en que se emite la factura: un servicio de noviembre que se factura el mes siguiente sale en diciembre. Arriba, las atrasadas de meses anteriores (marcadas con una línea roja).</p>' +
+        pfTabla(items, { verMes: !mes, empty: 'No hay facturas por emitir en ' + periodo + '.' }) + '</section>';
+      viewEl.innerHTML = html;
+      var form = $('#pfFiltros');
+      var aplicar = function () { var f = readForm(form); go(hashDe(f.anio, f.mes, f.descartadas)); };
+      $$('select, input', form).forEach(function (el) { el.addEventListener('change', aplicar); });
+      var mover = function (n) { var m = addMonths(anio + '-' + mes, n); go(hashDe(m.slice(0, 4), m.slice(5, 7), verDesc)); };
+      if ($('#pfPrev')) $('#pfPrev').addEventListener('click', function () { mover(-1); });
+      if ($('#pfNext')) $('#pfNext').addEventListener('click', function () { mover(1); });
+      if ($('#pfHoy')) $('#pfHoy').addEventListener('click', function () { go(hashDe(cur.slice(0, 4), cur.slice(5, 7), verDesc)); });
+      $('#pfAddBtn').addEventListener('click', function () { openPlanDialog(null, null, rerenderKeepScroll, mes ? anio + '-' + mes : cur); });
+      bindPf(viewEl, items, rerenderKeepScroll, null);
+    });
+  }
+
+  // Sección "Por facturar" de la ficha del cliente: lo que falta emitir (de cualquier mes). Se carga aparte.
+  function pfClienteSeccion() {
+    return '<section class="card" aria-labelledby="pfCliTitle" id="pfCliente"><div class="card-head"><h2 id="pfCliTitle">Por facturar</h2>' +
+      '<span class="btn-row"><a class="small" href="#/por-facturar">Ver panel de todos los clientes</a>' +
+      '<button type="button" class="btn small" id="pfCliAdd">Agregar factura por emitir</button></span></div>' +
+      '<div id="pfCliBody">' + loadingHtml() + '</div></section>';
+  }
+  function loadPfCliente(clientId, ctx) {
+    var box = $('#pfCliBody');
+    var add = $('#pfCliAdd');
+    var recargar = function () { loadPfCliente(clientId, ctx); };
+    if (add && !add.dataset.bound) {
+      add.dataset.bound = '1';
+      add.addEventListener('click', function () { openPlanDialog(null, clientId, recargar); });
+    }
+    if (!box) return;
+    api('GET', '/api/por-facturar' + qs({ client_id: clientId, pendientes: 1 })).then(function (r) {
+      if (ctx.stale() || !document.body.contains(box)) return;
+      var items = list(r && r.items);
+      box.innerHTML = '<p class="help">Facturas que faltan emitir a este cliente: meses de sus servicios recurrentes y proyectos o trabajos anotados. Se cierran solas al llegar la factura.</p>' +
+        pfTabla(items, { conCliente: false, enCliente: true, verMes: true, empty: 'Nada pendiente por facturar a este cliente.' });
+      bindPf(box, items, recargar, clientId);
+    }).catch(function (e) {
+      if (e.status === 401 || ctx.stale()) return;
+      box.innerHTML = errorRetryHtml(e, 'pfCliRetry');
+      var b = $('#pfCliRetry');
+      if (b) b.addEventListener('click', recargar);
     });
   }
 
