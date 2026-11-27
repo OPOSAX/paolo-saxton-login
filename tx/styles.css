@@ -331,4 +331,37 @@ tbody tr:hover + tr.accion-row td, tbody tr:has(+ tr.accion-row:hover) td { back
 .sii-banner { border-left: 4px solid var(--bad); }
 .sii-banner .alert .btn-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .qh .btn.link.small { font-size: .9em; padding: 0; }
+
+/* Qué hacer: botones de tareas (Hecho / Descartar / F29 presentado / Ya lo pagué) e ítems informativos */
+.qh .qh-acc { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .25em; }
+.qh .qh-acc:empty { display: none; }
+.qh .qh-acc .btn.small.secondary { padding: .15rem .55rem; font-size: .8rem; }
+.qh.info strong { color: #333; font-weight: 600; }
+.qh.info .qh-txt { color: #666; }
+.qh-tag.info { background: #555; }
+
+/* IVA: solicitudes de devolución (F2117) */
+.sol { border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 6px; padding: .8rem 1rem; margin: 0 0 1rem; }
+.sol-head { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .8rem; margin-bottom: .6rem; }
+.sol-head h3 { margin: 0; font-size: 1.05rem; }
+.sol-monto { margin-left: auto; }
+.sol h4 { margin: .9rem 0 .4rem; font-size: .9rem; text-transform: uppercase; letter-spacing: .03em; color: #333; }
+.req-list { list-style: none; margin: 0 0 .3rem; padding: 0; }
+.req-list li { display: flex; align-items: center; gap: .45rem; padding: .2rem 0; flex-wrap: wrap; }
+.req-list li.hecho label { text-decoration: line-through; color: var(--muted); }
+.req-list input[type=checkbox] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+fieldset.acc-check { border: 1px solid var(--border); border-radius: 6px; padding: .5rem .8rem; }
+fieldset.acc-check legend { font-weight: 600; font-size: .9rem; padding: 0 .3rem; }
+@media (max-width: 640px) {
+  .sol { padding: .7rem; }
+  .sol-monto { margin-left: 0; width: 100%; }
+}
 td.dias-vencida { color: var(--accent, #C8102E); font-weight: 700; background: #fff5f6; }
+
+/* Deshacer en avisos y tareas cerradas de "Qué hacer" */
+.toast .btn.link { color: #fff; text-decoration: underline; font-weight: 600; padding: 0 .2rem; }
+.qh-cerradas { margin-top: .6rem; }
+.qh-cerradas-ul { list-style: none; margin: .4rem 0 0; padding: 0; }
+.qh-cerradas-ul li { padding: .2rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.acc-groups fieldset.acc-check { margin-bottom: .5rem; }
+.acc-resumen { font-weight: 600; margin: .3rem 0 0; }

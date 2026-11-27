@@ -306,6 +306,23 @@
     box.appendChild(el);
     setTimeout(function () { el.remove(); }, kind === 'bad' ? 7000 : 4000);
   }
+  /* Aviso con botón "Deshacer" (queda 10 segundos). */
+  function toastUndo(msg, onUndo) {
+    var box = document.getElementById('toasts');
+    var el = document.createElement('div');
+    el.className = 'toast ok';
+    var span = document.createElement('span');
+    span.textContent = msg + ' ';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn link small';
+    btn.textContent = 'Deshacer';
+    btn.addEventListener('click', function () { btn.disabled = true; el.remove(); onUndo(); });
+    el.appendChild(span);
+    el.appendChild(btn);
+    box.appendChild(el);
+    setTimeout(function () { el.remove(); }, 10000);
+  }
   function toastErr(e) {
     if (e && e.status === 401) return; // la sesión venció: ya se avisó y se volvió al ingreso
     toast(e && e.message ? e.message : String(e), 'bad');
@@ -826,18 +843,94 @@
   var NIVEL_TXT = { roja: 'Urgente', amarilla: 'Atención', info: 'Aviso' };
 
   // Recuadro "Qué hacer" (Resumen y ficha de cliente). Los links solo pueden ser rutas internas (#/...).
-  function queHacerBox(qh, titulo, intro, vacio) {
+  // Botones de cada ítem: tareas manuales (Hecho / Descartar) y del sistema ("F29 presentado", "Ya lo pagué").
+  function queHacerBotones(q) {
+    if (!q.tarea_id) return '';
+    // el F29 del mes en curso es solo informativo: marcarlo antes de tiempo escondería el aviso del mes siguiente
+    if (q.tipo === 'f29' && q.nivel === 'info') return '';
+    var id = esc(q.tarea_id);
+    if (q.tipo === 'tarea') {
+      return ' <button type="button" class="btn small secondary" data-tarea-id="' + id + '" data-tarea-estado="hecha">Hecho</button>' +
+        ' <button type="button" class="btn link small" data-tarea-id="' + id + '" data-tarea-estado="descartada">Descartar</button>';
+    }
+    // tareas del sistema ("F29 presentado", "Ya lo pagué"): piden confirmación
+    var conf = q.tipo === 'giro' ? '¿Confirmas que ya pagaste este IVA? El aviso dejará de aparecer.' :
+      (q.tipo === 'f29' ? '¿Confirmas que ya presentaste el F29 de este período? El aviso dejará de aparecer.' : '');
+    return ' <button type="button" class="btn small secondary" data-tarea-id="' + id + '" data-tarea-estado="hecha"' +
+      (conf ? ' data-tarea-confirm="' + esc(conf) + '"' : '') + '>' + esc(q.boton || 'Hecho') + '</button>';
+  }
+  function queHacerBox(qh, titulo, intro, vacio, clientId) {
     return '<section class="card que-hacer" aria-labelledby="qhTitle"><div class="card-head"><h2 id="qhTitle">' + esc(titulo) + '</h2>' +
-      '<span class="muted small">En orden de urgencia</span></div>' +
+      '<span class="btn-row"><span class="muted small">En orden de urgencia</span>' +
+      '<button type="button" class="btn small" data-tarea-nueva="' + esc(clientId || '') + '">Agregar tarea</button></span></div>' +
       (intro ? '<p class="qh-intro">' + esc(intro) + '</p>' : '') +
       (qh.length ? '<ol class="qh-list">' + qh.map(function (q) {
         var href = /^#\//.test(q.link || '') ? q.link : '';
-        return '<li class="qh ' + (q.nivel === 'urgente' ? 'urgente' : 'pendiente') + '">' +
+        var nivel = q.nivel === 'urgente' ? 'urgente' : (q.nivel === 'info' ? 'info' : 'pendiente');
+        return '<li class="qh ' + nivel + '">' +
           (q.nivel === 'urgente' ? '<span class="qh-tag">Urgente</span>' : '') +
+          (q.nivel === 'info' ? '<span class="qh-tag info">Para tu información</span>' : '') +
           '<strong>' + esc(q.titulo) + '</strong><span class="qh-txt">' + esc(q.texto || '') + '</span>' +
-          (href ? '<a href="' + esc(href) + '">Ver</a>' : '') +
-          (q.alerta_id ? ' <button type="button" class="btn link small" data-sii-vista="' + esc(q.alerta_id) + '">Marcar como vista</button>' : '') + '</li>';
-      }).join('') + '</ol>' : '<p class="muted">' + esc(vacio || 'Nada pendiente. Todo en orden.') + '</p>') + '</section>';
+          '<span class="qh-acc">' + (href ? '<a href="' + esc(href) + '">Ver</a>' : '') +
+          (q.alerta_id ? ' <button type="button" class="btn link small" data-sii-vista="' + esc(q.alerta_id) + '">Marcar como vista</button>' : '') +
+          queHacerBotones(q) + '</span></li>';
+      }).join('') + '</ol>' : '<p class="muted">' + esc(vacio || 'Nada pendiente. Todo en orden.') + '</p>') +
+      '<div class="qh-cerradas"><button type="button" class="btn link small" data-tareas-cerradas="' + esc(clientId || '') + '">Ver tareas hechas o descartadas (para reabrir)</button>' +
+      '<div class="qh-cerradas-list"></div></div></section>';
+  }
+
+  // Lista de las últimas tareas hechas o descartadas, con "Reabrir" (deshace un "Hecho", "F29 presentado",
+  // "Ya lo pagué" o "Descartar" marcado por error). Los requisitos de solicitudes F2117 se reabren en la vista IVA.
+  function cargarTareasCerradas(btn) {
+    var box = btn.parentNode.querySelector('.qh-cerradas-list');
+    if (box.getAttribute('data-open') === '1') { box.innerHTML = ''; box.removeAttribute('data-open'); return; }
+    var cid = btn.getAttribute('data-tareas-cerradas');
+    box.innerHTML = loadingHtml('Cargando…');
+    api('GET', '/api/tareas' + qs({ estado: 'hecha,descartada', client_id: cid || undefined })).then(function (ts) {
+      ts = list(ts).filter(function (t) { return !t.solicitud_id; }).sort(function (a, b) {
+        return String(b.hecha_at || '').localeCompare(String(a.hecha_at || ''));
+      }).slice(0, 15);
+      box.setAttribute('data-open', '1');
+      box.innerHTML = ts.length ? '<ul class="qh-cerradas-ul">' + ts.map(function (t) {
+        return '<li><span class="chip ' + (t.estado === 'hecha' ? 'ok' : 'muted') + '">' + (t.estado === 'hecha' ? 'Hecha' : 'Descartada') + '</span> ' +
+          esc(t.titulo) + (t.hecha_at ? ' <span class="muted small">(' + esc(fdate(String(t.hecha_at).slice(0, 10))) + (t.hecha_por ? ', ' + esc(t.hecha_por) : '') + ')</span>' : '') +
+          ' <button type="button" class="btn link small" data-tarea-id="' + esc(t.id) + '" data-tarea-estado="pendiente">Reabrir</button></li>';
+      }).join('') + '</ul>' : '<p class="muted small">No hay tareas hechas ni descartadas.</p>';
+    }).catch(function (e) { box.innerHTML = errorHtml(e); });
+  }
+
+  // Agregar una tarea (desde "Qué hacer" o como requisito de una solicitud F2117).
+  function openTareaDialog(preset, onSaved) {
+    preset = preset || {};
+    getClients().catch(function () { return []; }).then(function () {
+      var dlg = openDialog(preset.solicitud_id ? 'Agregar requisito' : 'Agregar tarea',
+        '<form id="tarForm" novalidate><div class="form-grid">' +
+        fld({ label: preset.solicitud_id ? 'Requisito' : 'Qué hay que hacer', name: 'titulo', required: true, full: true,
+          placeholder: preset.solicitud_id ? 'Ej: Juntar las facturas y sus NC en PDF' : 'Ej: Llamar a Kyndryl por la OC de diciembre' }) +
+        fld({ label: 'Detalle (opcional)', name: 'detalle', type: 'textarea', full: true }) +
+        (preset.solicitud_id ? '' : fld({ label: 'Cliente (opcional)', name: 'client_id', type: 'select', optionsHtml: clientOptions(preset.client_id || '', 'Sin cliente') })) +
+        fld({ label: 'Vence (opcional)', name: 'vence', type: 'date', help: 'Si pasa la fecha y no está hecha, se marca como urgente.' }) +
+        fld({ label: 'Prioridad', name: 'prioridad', type: 'select', value: 'pendiente',
+          options: [['urgente', 'Urgente'], ['pendiente', 'Normal'], ['info', 'Solo para recordar']] }) +
+        '</div><div id="tarMsg"></div><div class="form-actions"><button type="button" class="btn secondary" data-close>Cancelar</button>' +
+        '<button type="submit" class="btn">Agregar</button></div></form>');
+      var form = $('#tarForm', dlg), msg = $('#tarMsg', dlg);
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var d = readForm(form);
+        if (!d.titulo) { showMsg(msg, 'Escribe qué hay que hacer.'); return; }
+        var body = { titulo: d.titulo, detalle: d.detalle || null, vence: d.vence || null, prioridad: d.prioridad || 'pendiente' };
+        if (preset.solicitud_id) body.solicitud_id = preset.solicitud_id;
+        else body.client_id = d.client_id || null;
+        var btn = $('button[type=submit]', form);
+        busy(btn, true, 'Guardando…');
+        api('POST', '/api/tareas', body).then(function () {
+          dlg.close();
+          toast(preset.solicitud_id ? 'Requisito agregado.' : 'Tarea agregada.', 'ok');
+          if (onSaved) onSaved(); else rerenderKeepScroll();
+        }).catch(function (e) { busy(btn, false); showMsg(msg, e.message); });
+      });
+    });
   }
 
   // Banner del Resumen con los reclamos nuevos que detectó el monitoreo del SII (hasta marcarlos como vistos).
@@ -1171,7 +1264,7 @@
         statCard({ label: 'Pagado (histórico)', value: esc(clp(pagadoTot)), desc: 'Pagos asignados a sus facturas.', kind: 'ok' }) +
         statCard({ label: 'Monto mensual', value: esc(fmonto(c)), desc: 'Según contrato.', kind: 'info' }) +
         '</div>';
-      if (c.que_hacer !== undefined) html += queHacerBox(list(c.que_hacer, 'que_hacer'), 'Qué hacer con ' + name, c.que_hacer_intro || '', 'Nada pendiente con este cliente.');
+      if (c.que_hacer !== undefined) html += queHacerBox(list(c.que_hacer, 'que_hacer'), 'Qué hacer con ' + name, c.que_hacer_intro || '', 'Nada pendiente con este cliente.', c.id || id);
 
       // Datos del cliente
       var pats = jsonList(c.payer_patterns);
@@ -1958,6 +2051,152 @@
   ];
   var ACCIONES = { descuento_f29: 'Descontar en el F29', f2117: 'Pedir devolución (F2117)' };
   var ACC_ESTADOS = [['pendiente', 'Pendiente'], ['presentado', 'Presentado'], ['aprobado', 'Aprobado'], ['rechazado', 'Rechazado'], ['aplicado', 'Aplicado / listo']];
+  // Devoluciones F2117: a mano solo se decide "sin decidir" o "no se pide"; el resto lo pone la solicitud.
+  var F2117_ESTADOS = [['pendiente', 'Sin decidir'], ['no_se_pide', 'No se pide (anota el motivo)']];
+  var F2117_DE_SOLICITUD = { en_solicitud: 1, presentada: 1, devuelta: 1 };
+  var SOL_ESTADOS = [['borrador', 'Borrador (juntando requisitos)'], ['lista', 'Lista para presentar'], ['presentada', 'Presentada al SII'],
+    ['resuelta', 'Resuelta (IVA devuelto)'], ['rechazada', 'Rechazada']];
+  var SOL_CHIP = { borrador: 'warn', lista: 'info', presentada: 'info', resuelta: 'ok', rechazada: 'bad' };
+  var REQUISITOS_SUGERIDOS = ['Confirmar con el contador qué NC se incluyen', 'Juntar las facturas y sus NC (PDF o XML)',
+    'Revisar que el IVA de esos meses esté pagado (F29)', 'Preparar el formulario 2117 en sii.cl'];
+
+  function accionLabel(a) {
+    var doc = a.factura || {};
+    var nc = a.nc || {};
+    var cname = (a.client_id !== undefined && a.client_id !== null ? clientName(a.client_id) : '') || a.client_name || '—';
+    return cname + ' · ' + (TIPO_CORTO[+doc.tipo] || 'FA') + ' ' + (doc.folio !== undefined ? doc.folio : '?') +
+      (nc.folio !== undefined ? ' · NC ' + nc.folio : '') + ' · IVA ' + clp(a.iva);
+  }
+  // NC sin decidir agrupadas por cliente, desmarcadas (cada solicitud suele ser de un cliente), con "Marcar todas"
+  // por grupo y un resumen de cuántas NC y qué monto se van a incluir.
+  function accionesCheckHtml(libres) {
+    if (!libres.length) return '<p class="muted">No hay NC fuera de plazo sin decidir.</p>';
+    var grupos = {}, orden = [];
+    libres.forEach(function (a) {
+      var k = (a.client_id !== undefined && a.client_id !== null ? clientName(a.client_id) : '') || a.client_name || '—';
+      if (!grupos[k]) { grupos[k] = []; orden.push(k); }
+      grupos[k].push(a);
+    });
+    orden.sort();
+    return '<div class="fld full acc-groups"><p class="help">Marca las NC que incluye esta solicitud.</p>' + orden.map(function (k) {
+      var g = grupos[k];
+      return '<fieldset class="acc-check" data-acc-grupo><legend>' + esc(k) + ' <span class="muted small">(' + esc(g.length === 1 ? '1 NC' : g.length + ' NC') + ', ' +
+        esc(clp(g.reduce(function (s, a) { return s + num(a.iva); }, 0))) + ')</span></legend>' +
+        '<button type="button" class="btn link small" data-acc-todas>Marcar todas</button>' + g.map(function (a) {
+          var id = uid('ac');
+          return '<div class="fld check"><input type="checkbox" id="' + id + '" data-acc-id="' + esc(a.id) + '" data-acc-iva="' + esc(num(a.iva)) + '">' +
+            '<label for="' + id + '">' + esc(accionLabel(a)) + '</label></div>';
+        }).join('') + '</fieldset>';
+    }).join('') + '<p class="acc-resumen" aria-live="polite">Ninguna NC marcada.</p></div>';
+  }
+  function bindAccionesCheck(root) {
+    var res = $('.acc-resumen', root);
+    function upd() {
+      var cs = $$('[data-acc-id]', root).filter(function (c) { return c.checked; });
+      var m = cs.reduce(function (s, c) { return s + num(c.getAttribute('data-acc-iva')); }, 0);
+      if (res) res.textContent = cs.length ? 'Se incluyen ' + (cs.length === 1 ? '1 NC' : cs.length + ' NC') + ' por ' + clp(m) + ' de IVA.' : 'Ninguna NC marcada.';
+    }
+    $$('[data-acc-todas]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var cs = $$('[data-acc-id]', b.parentNode);
+        var todas = cs.every(function (c) { return c.checked; });
+        cs.forEach(function (c) { c.checked = !todas; });
+        b.textContent = todas ? 'Marcar todas' : 'Desmarcar todas';
+        upd();
+      });
+    });
+    $$('[data-acc-id]', root).forEach(function (c) { c.addEventListener('change', upd); });
+    upd();
+  }
+  function checkedIds(root) {
+    return $$('[data-acc-id]', root).filter(function (c) { return c.checked; }).map(function (c) { return +c.getAttribute('data-acc-id'); });
+  }
+
+  function openSolicitudDialog(libres) {
+    var dlg = openDialog('Crear solicitud de devolución (F2117)',
+      '<form id="solForm" novalidate><div class="form-grid">' +
+      fld({ label: 'Nombre', name: 'nombre', required: true, full: true, placeholder: 'Ej: Kyndryl 2026', help: 'Para reconocerla en la lista.' }) +
+      fld({ label: 'Requisitos (uno por línea)', name: 'requisitos', type: 'textarea', full: true, value: REQUISITOS_SUGERIDOS.join('\n'),
+        help: 'Cada línea queda como una tarea por cumplir. Puedes cambiarlos o agregar más después.' }) +
+      accionesCheckHtml(libres) +
+      fld({ label: 'Notas (opcional)', name: 'notas', type: 'textarea', full: true }) +
+      '</div><div id="solMsg"></div><div class="form-actions"><button type="button" class="btn secondary" data-close>Cancelar</button>' +
+      '<button type="submit" class="btn">Crear solicitud</button></div></form>', { wide: true });
+    var form = $('#solForm', dlg), msg = $('#solMsg', dlg);
+    bindAccionesCheck(form);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var d = readForm(form);
+      if (!d.nombre) { showMsg(msg, 'Ponle un nombre a la solicitud.'); return; }
+      var resumen = $('.acc-resumen', form);
+      if (resumen && !confirm('Crear la solicitud «' + d.nombre + '». ' + resumen.textContent + ' ¿Seguir?')) return;
+      var btn = $('button[type=submit]', form);
+      busy(btn, true, 'Creando…');
+      api('POST', '/api/iva/solicitudes', { nombre: d.nombre, notas: d.notas || null, requisitos: splitLines(d.requisitos), accion_ids: checkedIds(form) })
+        .then(function () { dlg.close(); toast('Solicitud creada.', 'ok'); rerenderKeepScroll(); })
+        .catch(function (e) { busy(btn, false); showMsg(msg, e.message); });
+    });
+  }
+  function splitLines(s) { return String(s || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean); }
+
+  function openAgregarAccionesDialog(sol, libres) {
+    var dlg = openDialog('Agregar NC a «' + (sol.nombre || '') + '»',
+      '<form id="saForm" novalidate>' + accionesCheckHtml(libres) + '<div id="saMsg"></div><div class="form-actions">' +
+      '<button type="button" class="btn secondary" data-close>Cancelar</button>' +
+      (libres.length ? '<button type="submit" class="btn">Agregar</button>' : '') + '</div></form>', { wide: true });
+    var form = $('#saForm', dlg), msg = $('#saMsg', dlg);
+    bindAccionesCheck(form);
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var ids = checkedIds(form);
+      if (!ids.length) { showMsg(msg, 'Marca al menos una NC.'); return; }
+      var btn = $('button[type=submit]', form);
+      busy(btn, true, 'Agregando…');
+      api('POST', '/api/iva/solicitudes/' + encodeURIComponent(sol.id) + '/acciones', { agregar: ids })
+        .then(function () { dlg.close(); toast('NC agregadas a la solicitud.', 'ok'); rerenderKeepScroll(); })
+        .catch(function (e) { busy(btn, false); showMsg(msg, e.message); });
+    });
+  }
+
+  function solicitudHtml(s) {
+    var editable = s.estado === 'borrador' || s.estado === 'lista';
+    var est = SOL_ESTADOS.filter(function (e) { return e[0] === s.estado; })[0];
+    var acts = list(s.acciones);
+    var reqs = list(s.requisitos);
+    var faltan = list(s.faltan).length;
+    var h = '<article class="sol" data-sol="' + esc(s.id) + '"><div class="sol-head"><h3>' + esc(s.nombre || ('Solicitud ' + s.id)) + '</h3>' +
+      '<span class="chip ' + (SOL_CHIP[s.estado] || 'muted') + '">' + esc(est ? est[1] : s.estado) + '</span>' +
+      '<span class="sol-monto"><strong>' + esc(clp(s.monto)) + '</strong> <span class="muted">de IVA · ' + esc(acts.length === 1 ? '1 NC' : acts.length + ' NC') +
+      ' · ' + esc(s.n_facturas === 1 ? '1 factura' : (s.n_facturas || 0) + ' facturas') + '</span></span></div>';
+    h += '<div class="form-grid sol-form">' +
+      fld({ label: 'Estado', name: 'estado', type: 'select', value: s.estado, options: SOL_ESTADOS }) +
+      fld({ label: 'Fecha de presentación', name: 'fecha_presentacion', type: 'date', value: s.fecha_presentacion }) +
+      fld({ label: 'Folio en el SII', name: 'folio_sii', value: s.folio_sii }) +
+      fld({ label: 'Monto devuelto', name: 'monto_resuelto', type: 'money', value: s.monto_resuelto, help: 'Cuando el SII resuelva.' }) +
+      fld({ label: 'Notas', name: 'notas', type: 'textarea', value: s.notas, full: true }) + '</div>' +
+      '<div class="btn-row"><button type="button" class="btn small" data-sol-save="' + esc(s.id) + '">Guardar</button>' +
+      (editable ? '<button type="button" class="btn small secondary" data-sol-add="' + esc(s.id) + '">Agregar NC</button>' : '') +
+      (editable || s.estado === 'rechazada' ? '<button type="button" class="btn small danger" data-sol-del="' + esc(s.id) + '">Borrar solicitud</button>' : '') + '</div>';
+    h += '<h4>NC incluidas</h4><div class="table-wrap"><table><thead><tr><th scope="col">Cliente</th><th scope="col">Factura</th><th scope="col">NC</th>' +
+      '<th scope="col">Mes de la factura</th><th scope="col" class="num">IVA</th>' + (editable ? '<th scope="col"><span class="sr-only">Quitar</span></th>' : '') + '</tr></thead><tbody>';
+    if (!acts.length) h += emptyRow(editable ? 6 : 5, 'Sin NC asignadas. Usa «Agregar NC».');
+    acts.forEach(function (a) {
+      h += '<tr><td>' + esc(a.cliente || '—') + '</td><td class="nowrap">' + esc((TIPO_CORTO[+a.tipo] || 'FA') + ' ' + (a.folio !== null && a.folio !== undefined ? a.folio : '?')) + '</td>' +
+        '<td class="nowrap">' + (a.nc_folio ? 'NC ' + esc(a.nc_folio) + (a.nc_periodo ? '<span class="sub">' + esc(fmes(a.nc_periodo)) + '</span>' : '') : '—') + '</td>' +
+        '<td class="nowrap">' + esc(fmes(a.periodo || a.periodo_origen)) + '</td><td class="num">' + esc(clp(a.iva)) + '</td>' +
+        (editable ? '<td class="actions"><button type="button" class="btn link small" data-sol-quitar="' + esc(s.id) + ':' + esc(a.id) + '">Quitar</button></td>' : '') + '</tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<h4>Requisitos ' + (reqs.length ? '<span class="muted small">(' + (faltan ? (faltan === 1 ? 'falta 1' : 'faltan ' + faltan) : 'todos listos') + ')</span>' : '') + '</h4>' +
+      '<ul class="req-list">' + (reqs.length ? reqs.map(function (t) {
+        var id = uid('rq');
+        return '<li class="' + (t.estado === 'hecha' ? 'hecho' : '') + '"><input type="checkbox" id="' + id + '" data-req-id="' + esc(t.id) + '"' + (t.estado === 'hecha' ? ' checked' : '') + '>' +
+          '<label for="' + id + '">' + esc(t.titulo) + (t.vence ? ' <span class="muted small">(vence ' + esc(fdate(t.vence)) + ')</span>' : '') + '</label>' +
+          ' <button type="button" class="btn link small" data-req-quitar="' + esc(t.id) + '">Quitar</button></li>';
+      }).join('') : '<li class="muted">Sin requisitos.</li>') + '</ul>' +
+      '<button type="button" class="btn link small" data-req-add="' + esc(s.id) + '">Agregar requisito</button></article>';
+    return h;
+  }
 
   /* Valores calculados desde los documentos: objeto anidado o campos "calc_*". */
   function ivaCalc(p) {
@@ -1979,11 +2218,14 @@
       api('GET', '/api/iva'),
       api('GET', '/api/iva/pendientes').catch(function (e) { if (e.status === 401) throw e; return { _error: e }; }),
       api('GET', '/api/documents' + qs({ estado: 'reclamada_sin_nc' })).catch(function (e) { if (e.status === 401) throw e; return []; }),
-      getClients().catch(function () { return []; })
+      getClients().catch(function () { return []; }),
+      api('GET', '/api/iva/solicitudes').catch(function (e) { if (e.status === 401) throw e; return { _error: e }; })
     ]).then(function (res) {
       if (ctx.stale()) return;
       var periodos = list(res[0], 'periodos', 'periods').slice().sort(function (a, b) { return String(b.periodo || '').localeCompare(String(a.periodo || '')); });
       var acciones = res[1] && res[1]._error ? null : list(res[1], 'acciones', 'pendientes', 'actions');
+      var sols = res[4] && res[4]._error ? null : list(res[4], 'solicitudes');
+      var libres = (acciones || []).filter(function (a) { return a.accion === 'f2117' && a.estado === 'pendiente' && !a.solicitud_id; });
       var reclamadas = list(res[2], 'documents', 'documentos');
       var mesActual = monthISO(0);
 
@@ -2010,9 +2252,11 @@
       html += '</tbody></table></div></section>';
 
       // Acciones pendientes
-      var nAplic = (acciones || []).filter(function (a) { return a.estado === 'aplicado'; }).length;
+      // trámites cerrados: aplicados en el F29 y devoluciones F2117 ya devueltas o que no se piden
+      var CERRADOS = { aplicado: 1, devuelta: 1, no_se_pide: 1 };
+      var nAplic = (acciones || []).filter(function (a) { return CERRADOS[a.estado]; }).length;
       html += '<section class="card" aria-labelledby="acTitle"><div class="card-head"><h2 id="acTitle">Trámites de IVA por notas de crédito</h2>' +
-        (nAplic ? '<div class="fld check"><input type="checkbox" id="hideApl" checked><label for="hideApl">Ocultar los ya aplicados (' + esc(nAplic) + ')</label></div>' : '') + '</div>' +
+        (nAplic ? '<div class="fld check"><input type="checkbox" id="hideApl" checked><label for="hideApl">Ocultar los ya cerrados (' + esc(nAplic) + ')</label></div>' : '') + '</div>' +
         '<p class="help">Cada nota de crédito de una factura reclamada genera un trámite: descontar el IVA en el F29 o pedir la devolución (F2117). Actualiza el estado cuando avances.</p>';
       if (acciones === null) html += errorHtml(res[1]._error);
       else {
@@ -2027,17 +2271,29 @@
           var cid = a.client_id !== undefined ? a.client_id : doc.client_id;
           var cname = (cid !== undefined && cid !== null ? clientName(cid) : "") || a.client_name || a.cliente || doc.client_name;
           var sid = uid('ae'), nid = uid('an');
-          html += '<tr' + (a.estado === 'aplicado' ? ' class="row-aplicado hidden"' : '') + '><td>' + esc(cname || '—') + '</td><td class="nowrap">' + (folio !== undefined ? esc((TIPO_CORTO[+tipo] || '') + ' ' + folio) : '#' + esc(a.document_id)) +
+          html += '<tr' + (CERRADOS[a.estado] ? ' class="row-aplicado hidden"' : '') + '><td>' + esc(cname || '—') + '</td><td class="nowrap">' + (folio !== undefined ? esc((TIPO_CORTO[+tipo] || '') + ' ' + folio) : '#' + esc(a.document_id)) +
             (a.nc_folio ? '<span class="sub">NC ' + esc(a.nc_folio) + '</span>' : '') + '</td>' +
             '<td class="num">' + esc(clp(a.iva)) + '</td><td>' + esc(ACCIONES[a.accion] || a.accion || '') + '</td>' +
             '<td class="nowrap">' + esc(fmes(a.periodo_origen)) + '</td><td class="nowrap">' + esc(fmes(a.periodo_aplica)) + '</td>' +
-            '<td><label class="sr-only" for="' + sid + '">Estado</label><select id="' + sid + '" data-act-estado="' + esc(a.id) + '">' +
-            ACC_ESTADOS.map(function (e) { return '<option value="' + e[0] + '"' + (e[0] === a.estado ? ' selected' : '') + '>' + e[1] + '</option>'; }).join('') + '</select></td>' +
+            '<td>' + estadoAccionHtml(a, sid) + '</td>' +
             '<td><label class="sr-only" for="' + nid + '">Notas</label><input type="text" id="' + nid + '" data-act-notes="' + esc(a.id) + '" value="' + esc(a.notes || '') + '"></td>' +
             '<td class="actions"><button type="button" class="btn small" data-act-save="' + esc(a.id) + '">Guardar</button></td></tr>';
         });
         html += '</tbody></table></div>';
       }
+      html += '</section>';
+
+      // Solicitudes de devolución (F2117)
+      var montoLibres = libres.reduce(function (s, a) { return s + num(a.iva); }, 0);
+      html += '<section class="card" aria-labelledby="solTitle"><div class="card-head"><h2 id="solTitle">Solicitudes de devolución (F2117)</h2>' +
+        '<button type="button" class="btn" id="newSolBtn">Crear solicitud</button></div>' +
+        '<p class="help">Agrupa las NC emitidas fuera de plazo cuyo IVA se va a pedir de vuelta al SII con el formulario 2117. Los requisitos son tareas: márcalos a medida que los completes. ' +
+        'Al pasar la solicitud a «Presentada» sus NC quedan como presentadas; al pasarla a «Resuelta», como devueltas. Si el SII la rechaza, sus NC vuelven a quedar sin decidir.</p>' +
+        (libres.length ? '<p class="help warn">' + esc(libres.length === 1 ? 'Hay 1 NC fuera de plazo sin decidir' : 'Hay ' + libres.length + ' NC fuera de plazo sin decidir') +
+          ' (' + esc(clp(montoLibres)) + ' de IVA): agrégalas a una solicitud o márcalas «No se pide» en la tabla de trámites (se te pedirá el motivo).</p>' : '');
+      if (sols === null) html += errorHtml(res[4]._error);
+      else if (!sols.length) html += '<p class="muted">Aún no hay solicitudes.</p>';
+      else html += sols.map(solicitudHtml).join('');
       html += '</section>';
 
       // Períodos
@@ -2059,6 +2315,12 @@
         else if (num(p.postergado) > 0) st = '<span class="chip info">Postergado</span>';
         else if (p.f29_folio) st = '<span class="chip warn">Declarado, sin pago</span>';
         else st = '<span class="chip muted">Sin declarar</span>';
+        if (p.pagado_por === 'banco') st += '<span class="sub">Pago encontrado en la cartola</span>';
+        else if (p.pagado_por === 'tarea') {
+          st += '<span class="sub">Marcado como pagado en «Qué hacer»</span>' + (p.giro_tarea_id ?
+            '<button type="button" class="btn link small" data-tarea-id="' + esc(p.giro_tarea_id) + '" data-tarea-estado="pendiente"' +
+            ' data-tarea-confirm="¿Volver a marcar este IVA como impago? El aviso de pago vuelve a aparecer en «Qué hacer».">No está pagado</button>' : '');
+        }
         var diff = '';
         var hasDiff = isNum(p.diferencia) ? num(p.diferencia) !== 0 :
           (calc && isNum(calc.debito_total) && isNum(p.debito_total) && num(calc.debito_total) !== num(p.debito_total));
@@ -2097,15 +2359,95 @@
       $$('[data-act-save]', viewEl).forEach(function (b) {
         b.addEventListener('click', function () {
           var id = b.getAttribute('data-act-save');
+          var sel = $('[data-act-estado="' + id + '"]', viewEl);
+          var body = { notes: $('[data-act-notes="' + id + '"]', viewEl).value.trim() || null };
+          if (sel) body.estado = sel.value;
+          var orig = (acciones || []).filter(function (x) { return String(x.id) === String(id); })[0] || {};
+          if (body.estado === 'no_se_pide' && orig.estado !== 'no_se_pide' && (body.notes || '') === String(orig.notes || '').trim()) {
+            // la nota precargada la escribe el sistema: el motivo se pide aparte
+            var motivo = window.prompt('¿Por qué no se pide de vuelta este IVA? (por ejemplo: "El contador lo deja en el F29")', '');
+            if (motivo === null) return;
+            motivo = motivo.trim();
+            if (!motivo) { toast('Anota el motivo por el que no se pide.', 'bad'); return; }
+            body.notes = motivo;
+          }
           busy(b, true);
-          api('PUT', '/api/iva/actions/' + encodeURIComponent(id), {
-            estado: $('[data-act-estado="' + id + '"]', viewEl).value,
-            notes: $('[data-act-notes="' + id + '"]', viewEl).value.trim() || null
-          }).then(function () { busy(b, false); toast('Trámite actualizado.', 'ok'); })
+          api('PUT', '/api/iva/actions/' + encodeURIComponent(id), body)
+            .then(function () { busy(b, false); toast('Trámite actualizado.', 'ok'); rerenderKeepScroll(); })
             .catch(function (e) { busy(b, false); toastErr(e); });
         });
       });
+      bindMoney(viewEl);
+      var solById = {};
+      (sols || []).forEach(function (s) { solById[String(s.id)] = s; });
+      $('#newSolBtn').addEventListener('click', function () { openSolicitudDialog(libres); });
+      $$('[data-sol-add]', viewEl).forEach(function (b) {
+        b.addEventListener('click', function () { openAgregarAccionesDialog(solById[b.getAttribute('data-sol-add')], libres); });
+      });
+      $$('[data-sol-save]', viewEl).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var sid = b.getAttribute('data-sol-save'), s = solById[sid];
+          var d = readForm($('[data-sol="' + sid + '"] .sol-form', viewEl));
+          if (d.estado === 'rechazada' && s.estado !== 'rechazada' &&
+            !confirm('Al marcarla rechazada, sus NC vuelven a quedar sin decidir (se anota en las notas cuáles incluía). ¿Seguir?')) return;
+          busy(b, true, 'Guardando…');
+          api('PATCH', '/api/iva/solicitudes/' + encodeURIComponent(sid), {
+            estado: d.estado, fecha_presentacion: d.fecha_presentacion || null, folio_sii: d.folio_sii || null,
+            monto_resuelto: d.monto_resuelto, notas: d.notas || null
+          }).then(function () { toast('Solicitud actualizada.', 'ok'); rerenderKeepScroll(); })
+            .catch(function (e) { busy(b, false); toastErr(e); });
+        });
+      });
+      $$('[data-sol-del]', viewEl).forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (!confirm('¿Borrar esta solicitud? Sus NC vuelven a quedar sin decidir y se borran sus requisitos.')) return;
+          busy(b, true);
+          api('DELETE', '/api/iva/solicitudes/' + encodeURIComponent(b.getAttribute('data-sol-del')))
+            .then(function () { toast('Solicitud borrada.', 'ok'); rerenderKeepScroll(); })
+            .catch(function (e) { busy(b, false); toastErr(e); });
+        });
+      });
+      $$('[data-sol-quitar]', viewEl).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var p = b.getAttribute('data-sol-quitar').split(':');
+          busy(b, true);
+          api('POST', '/api/iva/solicitudes/' + encodeURIComponent(p[0]) + '/acciones', { quitar: [+p[1]] })
+            .then(function () { toast('NC quitada de la solicitud.', 'ok'); rerenderKeepScroll(); })
+            .catch(function (e) { busy(b, false); toastErr(e); });
+        });
+      });
+      $$('[data-req-id]', viewEl).forEach(function (c) {
+        c.addEventListener('change', function () {
+          c.disabled = true;
+          api('PATCH', '/api/tareas/' + encodeURIComponent(c.getAttribute('data-req-id')), { estado: c.checked ? 'hecha' : 'pendiente' })
+            .then(function () { rerenderKeepScroll(); })
+            .catch(function (e) { c.disabled = false; c.checked = !c.checked; toastErr(e); });
+        });
+      });
+      $$('[data-req-quitar]', viewEl).forEach(function (b) {
+        b.addEventListener('click', function () {
+          busy(b, true);
+          api('PATCH', '/api/tareas/' + encodeURIComponent(b.getAttribute('data-req-quitar')), { estado: 'descartada' })
+            .then(function () { toast('Requisito quitado.', 'ok'); rerenderKeepScroll(); })
+            .catch(function (e) { busy(b, false); toastErr(e); });
+        });
+      });
+      $$('[data-req-add]', viewEl).forEach(function (b) {
+        b.addEventListener('click', function () { openTareaDialog({ solicitud_id: +b.getAttribute('data-req-add') }); });
+      });
     });
+  }
+
+  // Estado de un trámite de IVA: las devoluciones F2117 muestran si están en una solicitud, presentadas, devueltas o
+  // si se decidió no pedirlas; a mano solo se elige "sin decidir" o "no se pide".
+  function estadoAccionHtml(a, sid) {
+    if (a.accion === 'f2117' && F2117_DE_SOLICITUD[a.estado]) {
+      return '<span class="chip ' + (a.estado === 'devuelta' ? 'ok' : 'info') + '">' + esc(a.estado_texto || a.estado) + '</span>';
+    }
+    var opts = a.accion === 'f2117' ? F2117_ESTADOS.slice() : ACC_ESTADOS.slice();
+    if (!opts.some(function (e) { return e[0] === a.estado; })) opts.push([a.estado, a.estado_texto || a.estado]);
+    return '<label class="sr-only" for="' + sid + '">Estado</label><select id="' + sid + '" data-act-estado="' + esc(a.id) + '">' +
+      opts.map(function (e) { return '<option value="' + esc(e[0]) + '"' + (e[0] === a.estado ? ' selected' : '') + '>' + esc(e[1]) + '</option>'; }).join('') + '</select>';
   }
 
   function openIvaDialog(p) {
@@ -2554,6 +2896,37 @@
       api('POST', '/api/sii/alertas/' + encodeURIComponent(b.getAttribute('data-sii-vista')) + '/vista', {})
         .then(function () { toast('Reclamo marcado como visto.', 'ok'); render(); })
         .catch(function (e) { b.disabled = false; toastErr(e); });
+    });
+    // "Qué hacer": Hecho / Descartar / F29 presentado / Ya lo pagué (tareas) y "Agregar tarea"
+    document.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('[data-tarea-id][data-tarea-estado]') : null;
+      if (b) {
+        var est = b.getAttribute('data-tarea-estado');
+        var tid = b.getAttribute('data-tarea-id');
+        var conf = b.getAttribute('data-tarea-confirm');
+        if (conf && !confirm(conf)) return;
+        if (est === 'descartada' && !confirm('¿Descartar esta tarea? Dejará de aparecer en "Qué hacer".')) return;
+        b.disabled = true;
+        api('PATCH', '/api/tareas/' + encodeURIComponent(tid), { estado: est })
+          .then(function () {
+            if (est === 'pendiente') toast('Tarea reabierta: vuelve a aparecer en «Qué hacer».', 'ok');
+            else {
+              // un clic por error se deshace desde el aviso (o con "Reabrir" en la lista de tareas cerradas)
+              toastUndo(est === 'hecha' ? 'Listo, marcado como hecho.' : 'Tarea descartada.', function () {
+                api('PATCH', '/api/tareas/' + encodeURIComponent(tid), { estado: 'pendiente' })
+                  .then(function () { toast('Deshecho: la tarea vuelve a estar pendiente.', 'ok'); rerenderKeepScroll(); })
+                  .catch(toastErr);
+              });
+            }
+            rerenderKeepScroll();
+          })
+          .catch(function (e) { b.disabled = false; toastErr(e); });
+        return;
+      }
+      var c = ev.target && ev.target.closest ? ev.target.closest('[data-tareas-cerradas]') : null;
+      if (c) { cargarTareasCerradas(c); return; }
+      var n = ev.target && ev.target.closest ? ev.target.closest('[data-tarea-nueva]') : null;
+      if (n) openTareaDialog({ client_id: n.getAttribute('data-tarea-nueva') || null });
     });
 
     // Si hay sesión, refrescar datos del usuario (y must_change) antes de mostrar.
