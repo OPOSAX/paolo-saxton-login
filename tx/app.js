@@ -80,6 +80,14 @@
     if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
     return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
   }
+  // Monto escrito a la chilena: "373,11", "7.071.225", "$ 120.000", "1.109,55 UF" (punto de miles, coma decimal).
+  function parseMonto(s) {
+    var t = String(s === null || s === undefined ? '' : s).trim().replace(/[\s$]/g, '').replace(/UF$/i, '');
+    if (!t) return null;
+    if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    return /^\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
+  }
   function fmesLargo(v) {
     var m = String(v || '').match(/^(\d{4})-(\d{2})/);
     return m ? MESES_LARGO[+m[2] - 1] + ' ' + m[1] : (v || '—');
@@ -489,6 +497,7 @@
     { re: /^#\/(dashboard)?$/, view: viewDashboard, nav: 'dashboard', title: 'Resumen' },
     { re: /^#\/clientes$/, view: viewClients, nav: 'clientes', title: 'Clientes' },
     { re: /^#\/cliente\/(\d+)$/, view: viewClient, nav: 'clientes', title: 'Cliente' },
+    { re: /^#\/recurrentes$/, view: viewRecurrentes, nav: 'recurrentes', title: 'Recurrentes' },
     { re: /^#\/documentos$/, view: viewDocuments, nav: 'documentos', title: 'Documentos' },
     { re: /^#\/banco$/, view: viewBank, nav: 'banco', title: 'Banco' },
     { re: /^#\/iva$/, view: viewIva, nav: 'iva', title: 'IVA' },
@@ -849,6 +858,13 @@
     // el F29 del mes en curso es solo informativo: marcarlo antes de tiempo escondería el aviso del mes siguiente
     if (q.tipo === 'f29' && q.nivel === 'info') return '';
     var id = esc(q.tarea_id);
+    if (q.tipo === 'recurrente') {
+      // avisos de servicios recurrentes: se cierran solos al aparecer la factura; "Descartar aviso" los oculta
+      if (q.tarea_ids && q.tarea_ids.length > 1) {
+        return ' <button type="button" class="btn link small" data-tareas-descartar="' + esc(q.tarea_ids.join(',')) + '">' + esc(q.boton || 'Descartar avisos') + '</button>';
+      }
+      return ' <button type="button" class="btn link small" data-tarea-id="' + id + '" data-tarea-estado="descartada">' + esc(q.boton || 'Descartar aviso') + '</button>';
+    }
     if (q.tipo === 'tarea') {
       return ' <button type="button" class="btn small secondary" data-tarea-id="' + id + '" data-tarea-estado="hecha">Hecho</button>' +
         ' <button type="button" class="btn link small" data-tarea-id="' + id + '" data-tarea-estado="descartada">Descartar</button>';
@@ -1277,9 +1293,14 @@
         '<dt>Cómo aparece en el banco</dt><dd>' + (pats.length ? '<div class="tag-list">' + pats.map(function (p) { return '<span class="tag">' + esc(p) + '</span>'; }).join('') + '</div>' : '<span class="muted">Sin definir: sus pagos no se reconocerán solos.</span>') + '</dd>' +
         '</dl></section>';
 
+      // Servicios recurrentes: control mes a mes de lo que se factura todos los meses
+      html += recurrentesSeccion(c, c.id || id);
+
       // Resumen mensual
       // Meses de servicio del contrato mensual: ¿cada mes quedó facturado completo y pagado?
+      // (si el cliente tiene servicios recurrentes, el control lo hacen ellos y esta tabla queda plegada)
       var ms = list(c.meses_servicio, 'meses_servicio'), msr = c.meses_servicio_resumen || {};
+      var msPlegado = !!c.control_por_recurrentes;
       if (ms.length) {
         var MS_EST = {
           ok: ['OK', 'ok'], por_cobrar: ['Por cobrar', 'warn'], cedida: ['Cedida', 'info'],
@@ -1293,7 +1314,8 @@
           var t = esUf ? n.toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' UF' : clp(Math.round(n));
           return (signo && n > 0 ? '+' : '') + t;
         };
-        html += '<section class="card" aria-labelledby="msTitle"><h2 id="msTitle">Meses de servicio</h2>' +
+        html += (msPlegado ? '<details class="card"><summary>Meses de servicio según el monto mensual del contrato</summary>' :
+          '<section class="card" aria-labelledby="msTitle"><h2 id="msTitle">Meses de servicio</h2>') +
           (msr.texto ? '<p class="qh-intro">' + esc(msr.texto) + '</p>' : '') +
           '<p class="help">Cada fila es un mes del contrato. Cuenta solo las facturas vigentes de servicio mensual (no las anuladas ni las reclamadas)' +
           (esUf ? ', convertidas a UF con la UF del día de emisión' : '') + '. "Diferencia" compara con el contrato; en los meses por re-facturar cuenta lo reclamado como si se volviera a facturar igual.</p>' +
@@ -1308,7 +1330,7 @@
             '</td><td class="num">' + (difBad ? '<strong class="text-bad">' + esc(cant(dif, true)) + '</strong>' : (dif === null ? '—' : 'OK')) +
             '</td><td><span class="chip ' + e[1] + '">' + esc(e[0]) + '</span></td><td class="desc">' + esc(r.detalle || '') + '</td></tr>';
         });
-        html += '</tbody></table></div></section>';
+        html += '</tbody></table></div>' + (msPlegado ? '</details>' : '</section>');
       }
 
       html += '<section class="card" aria-labelledby="rmTitle"><h2 id="rmTitle">Resumen por mes</h2>' +
@@ -1359,10 +1381,324 @@
       $('#editClientBtn').addEventListener('click', function () { openClientDialog(c, function () { rerenderKeepScroll(); }); });
       $('#newDocBtn').addEventListener('click', function () { openDocDialog(null, rerenderKeepScroll, c.id || id); });
       bindDocsTable(viewEl, docs, rerenderKeepScroll);
+      bindRecurrentes(viewEl, list(c.recurrentes), c.id || id, rerenderKeepScroll);
       if (ctx.query.doc) {
         var row = document.getElementById('doc-' + ctx.query.doc);
         if (row) setTimeout(function () { row.scrollIntoView({ block: 'center' }); }, 50);
       }
+    });
+  }
+
+  /* ======================================================================
+   * Servicios recurrentes (ficha del cliente y vista general)
+   * ==================================================================== */
+  var REC_EST = {
+    pagado: ['Pagado', '✓'],
+    facturado: ['Facturado, por cobrar', '$'],
+    falta: ['Falta facturar', '!'],
+    por_facturar: ['Por facturar', '·'],
+    duplicado: ['Facturas de más', '×2']
+  };
+  var REC_UNIDADES = [['UF', 'UF'], ['CLP', 'Pesos (CLP)'], ['USD', 'Dólares (USD)']];
+  function decimalCL(n, dec) {
+    return num(n).toLocaleString('es-CL', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  }
+  function recMonto(monto, unidad) {
+    if (!isNum(monto)) return '—';
+    if (unidad === 'CLP') return clp(monto);
+    var n = Number(monto);
+    return decimalCL(n, n === Math.round(n) ? 0 : 2) + ' ' + (unidad || 'UF');
+  }
+  function recVigencia(r) {
+    var p = r.periodicidad === 'anual' ? 'Anual desde ' : 'Desde ';
+    return p + fmes(r.desde) + (r.hasta ? ' hasta ' + fmes(r.hasta) : r.fin ? ' hasta ' + fmes(r.fin) + ' (último hito)' : ' (vigente, sin término)');
+  }
+  function recHitos(r) {
+    if (!r.total_hitos) return '';
+    var h = r.hito_actual ? Math.min(num(r.hito_actual), num(r.total_hitos)) : null;
+    return h ? 'Hito ' + h + ' de ' + r.total_hitos : r.total_hitos + ' hitos';
+  }
+  function recCuando(r) {
+    var t = r.cuando_facturar === 'mismo_mes' ? 'Se factura el mismo mes' : 'Se factura el mes siguiente';
+    return t + (r.dia_limite ? ' (hasta el día ' + r.dia_limite + ')' : '') +
+      (num(r.facturas_por_mes) > 1 ? ' · ' + r.facturas_por_mes + ' facturas por mes' : '');
+  }
+  function recDocTxt(d) {
+    return docLabel(d) + ' (' + clp(d.neto) + ' neto' + (num(d.saldo) > 0 && (d.estado === 'pendiente' || d.estado === 'parcial') ? ', saldo ' + clp(d.saldo) : '') +
+      (d.manual ? ', asignada a mano' : '') + (d.complemento ? ', complemento por diferencia' : '') +
+      (d.mes_segun === 'emision' ? ', mes deducido de la fecha de emisión' : d.mes_segun === 'hito' ? ', mes según el hito de la glosa' : d.mes_segun === 'glosa' ? ', mes según la glosa' : '') + ')';
+  }
+  // Chip de un mes: color + símbolo + texto oculto (el color no es lo único que informa). Detalle en el tooltip.
+  function recChip(f, etiqueta) {
+    var e = REC_EST[f.estado] || [f.estado, '?'];
+    var tip = fmesLargo(f.mes) + ': ' + e[0] + (f.hito ? ' · hito ' + f.hito : '') +
+      (f.facturas && f.facturas.length ? '\nFacturas: ' + f.facturas.map(recDocTxt).join('; ') : '') +
+      (f.reclamadas && f.reclamadas.length ? '\nReclamadas (no cuentan): ' + f.reclamadas.map(function (d) { return docLabel(d); }).join(', ') : '') +
+      (f.detalle ? '\n' + f.detalle : '');
+    return '<li class="rec-mes ' + esc(f.estado) + '" title="' + esc(tip) + '" tabindex="0" aria-label="' + esc(tip.replace(/\n/g, '. ')) + '">' +
+      '<span aria-hidden="true">' + esc(etiqueta || fmes(f.mes)) + ' <b>' + esc(e[1]) + '</b></span></li>';
+  }
+  function fmesCorto(v) {
+    var m = String(v || '').match(/^(\d{4})-(\d{2})/);
+    return m ? MESES[+m[2] - 1] + ' ' + m[1].slice(2) : String(v || '');
+  }
+  function recGrid(r, meses, compacto) {
+    var por = {};
+    list(r.meses).forEach(function (f) { por[f.mes] = f; });
+    var ms = meses || list(r.meses).map(function (f) { return f.mes; });
+    if (!ms.length) return '<p class="muted small">Sin meses que controlar todavía (empieza en ' + esc(fmes(r.inicio_control || r.desde)) + ').</p>';
+    var etq = compacto ? fmesCorto : fmes;
+    return '<ol class="rec-grid" aria-label="Meses de ' + esc(r.nombre) + '">' + ms.map(function (m) {
+      if (por[m]) return recChip(por[m], etq(m));
+      return '<li class="rec-mes vacio" aria-label="' + esc(fmesLargo(m)) + ': fuera de vigencia"><span aria-hidden="true">' + esc(etq(m)) + '</span></li>';
+    }).join('') + '</ol>';
+  }
+  function recLeyenda() {
+    return '<p class="rec-leyenda small" aria-hidden="true">' + Object.keys(REC_EST).map(function (k) {
+      return '<span class="rec-mes ' + k + '">' + esc(REC_EST[k][1]) + '</span> ' + esc(REC_EST[k][0]);
+    }).join(' &nbsp; ') + '</p>';
+  }
+  function recResumenTxt(r) {
+    var s = r.resumen || {};
+    var p = [];
+    p.push(num(s.al_dia) + ' de ' + num(s.meses) + (num(s.meses) === 1 ? ' mes al día' : ' meses al día'));
+    if (list(s.faltan).length) p.push('falta facturar ' + list(s.faltan).map(fmes).join(', '));
+    if (list(s.duplicados).length) p.push('facturas de más en ' + list(s.duplicados).map(fmes).join(', '));
+    if (num(s.por_cobrar) > 0) p.push('por cobrar ' + clp(s.por_cobrar));
+    return p.join(' · ');
+  }
+  // Selector para asignar una factura a un recurrente del mismo cliente ("" = automático, 0 = no es recurrente).
+  function recSelector(doc, recs, actual) {
+    var opts = '<option value="">' + (actual === undefined ? 'Elige el servicio…' : 'Automático') + '</option>' +
+      recs.filter(function (r) { return String(r.client_id) === String(doc.client_id) && (r.activo || String(r.id) === String(actual)); }).map(function (r) {
+        return '<option value="' + esc(r.id) + '"' + (String(r.id) === String(actual) ? ' selected' : '') + '>' + esc(r.nombre + ' (' + recMonto(r.monto, r.unidad) + ')') + '</option>';
+      }).join('') + '<option value="0"' + (String(actual) === '0' ? ' selected' : '') + '>No es de un servicio recurrente</option>';
+    return '<label class="sr-only" for="recsel-' + esc(doc.id) + '">Servicio de la factura ' + esc(doc.folio) + '</label>' +
+      '<select id="recsel-' + esc(doc.id) + '" data-rec-doc="' + esc(doc.id) + '">' + opts + '</select>';
+  }
+  function recSinAsignarHtml(sin, recs, conCliente) {
+    if (!sin.length) return '';
+    var html = '<section class="card rec-sin" aria-labelledby="recSinTitle"><h2 id="recSinTitle">Facturas sin asignar (' + esc(sin.length) + ')</h2>' +
+      '<p class="help">El sistema no pudo decidir a qué servicio corresponden. Elige el servicio (o márcalas como «no es de un servicio recurrente»): la asignación a mano manda sobre la automática.</p>' +
+      '<div class="table-wrap"><table><thead><tr>' + (conCliente ? '<th scope="col">Cliente</th>' : '') +
+      '<th scope="col">Factura</th><th scope="col">Mes de servicio</th><th scope="col" class="num">Neto</th><th scope="col">Glosa</th><th scope="col">Por qué</th><th scope="col">Servicio</th></tr></thead><tbody>';
+    sin.forEach(function (d) {
+      html += '<tr>' + (conCliente ? '<td><a href="#/cliente/' + esc(d.client_id) + '">' + esc(d.client_short || d.client_name || clientName(d.client_id)) + '</a></td>' : '') +
+        '<td class="nowrap">' + esc(docLabel(d)) + '<span class="sub">' + esc(fdate(d.fecha)) + '</span></td>' +
+        '<td class="nowrap">' + esc(fmes(d.servicio_mes)) + (d.servicio_hasta && d.servicio_hasta !== d.servicio_mes ? ' a ' + esc(fmes(d.servicio_hasta)) : '') + '</td>' +
+        '<td class="num">' + esc(clp(d.neto)) + '</td><td class="desc">' + esc(d.glosa || '') + '</td>' +
+        '<td class="desc">' + esc(d.motivo || '') + '</td><td>' + recSelector(d, recs) + '</td></tr>';
+    });
+    return html + '</tbody></table></div></section>';
+  }
+  function bindRecSelectores(root, onDone) {
+    $$('select[data-rec-doc]', root).forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        var v = sel.value;
+        sel.disabled = true;
+        api('PUT', '/api/documents/' + encodeURIComponent(sel.getAttribute('data-rec-doc')) + '/recurrente', { recurrente_id: v === '' ? null : Number(v) })
+          .then(function () {
+            toast(v === '' ? 'La factura vuelve a la asignación automática.' : (v === '0' ? 'Marcada como «no es de un servicio recurrente».' : 'Factura asignada al servicio.'), 'ok');
+            onDone();
+          })
+          .catch(function (e) { sel.disabled = false; toastErr(e); });
+      });
+    });
+  }
+
+  // Sección "Servicios recurrentes" de la ficha del cliente.
+  function recurrentesSeccion(c, clientId) {
+    var recs = list(c.recurrentes), sin = list(c.recurrentes_sin_asignar);
+    var html = '<section class="card" aria-labelledby="recTitle"><div class="card-head"><h2 id="recTitle">Servicios recurrentes</h2>' +
+      '<span class="btn-row"><a class="small" href="#/recurrentes">Ver todos los clientes</a>' +
+      '<button type="button" class="btn small" id="recAddBtn">Agregar servicio</button></span></div>';
+    if (!recs.length) {
+      html += '<p class="muted">Este cliente no tiene servicios recurrentes registrados. Agrega los que se facturan todos los meses (soporte, arriendo, licencias…) para llevar el control de qué meses faltan por facturar o cobrar.</p></section>';
+      return html;
+    }
+    html += '<p class="help">Cada cuadro es un mes: qué facturas lo cubren y si está pagado, facturado por cobrar, falta facturar o aún no toca. Pasa el mouse (o el foco) por un mes para ver los folios. Las facturas anuladas con NC no cuentan.</p>' + recLeyenda();
+    recs.forEach(function (r) {
+      var inact = !r.activo;
+      var docs = {};
+      list(r.meses).forEach(function (f) { list(f.facturas).concat(list(f.reclamadas)).forEach(function (d) { docs[d.id] = d; }); });
+      var docsL = Object.keys(docs).map(function (k) { return docs[k]; }).sort(function (a, b) { return String(b.servicio_mes || '').localeCompare(String(a.servicio_mes || '')) || num(b.folio) - num(a.folio); });
+      html += '<article class="rec-item' + (inact ? ' inactivo' : '') + '" aria-labelledby="rec-' + esc(r.id) + '">' +
+        '<div class="rec-head"><h3 id="rec-' + esc(r.id) + '">' + esc(r.nombre) + '</h3>' +
+        '<span class="rec-monto">' + esc(recMonto(r.monto, r.unidad)) + (r.periodicidad === 'anual' ? ' al año' : ' al mes') + '</span>' +
+        (inact ? '<span class="chip muted">Inactivo</span>' : (r.vigente ? '' : '<span class="chip muted">Terminado</span>')) +
+        '<span class="btn-row rec-acc"><button type="button" class="btn small secondary" data-rec-edit="' + esc(r.id) + '" aria-label="Editar ' + esc(r.nombre) + '">Editar</button>' +
+        (inact ? '<button type="button" class="btn small secondary" data-rec-activo="' + esc(r.id) + '" data-valor="1" aria-label="Reactivar ' + esc(r.nombre) + '">Reactivar</button>'
+          : '<button type="button" class="btn small secondary" data-rec-activo="' + esc(r.id) + '" data-valor="0" aria-label="Desactivar ' + esc(r.nombre) + '">Desactivar</button>') +
+        '<button type="button" class="btn link small" data-rec-del="' + esc(r.id) + '" aria-label="Eliminar ' + esc(r.nombre) + '">Eliminar</button></span></div>' +
+        '<p class="rec-meta small">' + esc(recVigencia(r)) + ' · ' + esc(recCuando(r)) +
+        (r.oc ? ' · OC ' + esc(r.oc) : '') + (recHitos(r) ? ' · <strong>' + esc(recHitos(r)) + '</strong>' : '') +
+        (r.patron ? ' · Patrón en la glosa: <span class="tag">' + esc(r.patron) + '</span>' : '') + '</p>' +
+        (r.notas ? '<p class="rec-notas small">' + esc(r.notas) + '</p>' : '') +
+        '<p class="rec-res small">' + esc(recResumenTxt(r)) + '</p>' + recGrid(r);
+      if (docsL.length) {
+        html += '<details class="rec-docs"><summary>Facturas asignadas (' + esc(docsL.length) + ')</summary><div class="table-wrap"><table><thead><tr>' +
+          '<th scope="col">Factura</th><th scope="col">Mes de servicio</th><th scope="col" class="num">Neto</th><th scope="col" class="num">Saldo</th><th scope="col">Estado</th><th scope="col">Asignación</th></tr></thead><tbody>' +
+          docsL.map(function (d) {
+            return '<tr><td class="nowrap">' + esc(docLabel(d)) + '<span class="sub">' + esc(fdate(d.fecha)) + '</span></td><td class="nowrap">' + esc(fmes(d.servicio_mes)) +
+              (d.servicio_hasta && d.servicio_hasta !== d.servicio_mes ? ' a ' + esc(fmes(d.servicio_hasta)) : '') + '</td><td class="num">' + esc(clp(d.neto)) +
+              '</td><td class="num">' + esc(clp(d.saldo)) + '</td><td>' + chip(d.estado, d) + '</td><td>' +
+              recSelector(Object.assign({ client_id: r.client_id }, d), recs, d.manual ? r.id : '') + '</td></tr>';
+          }).join('') + '</tbody></table></div></details>';
+      }
+      html += '</article>';
+    });
+    html += '</section>';
+    html += recSinAsignarHtml(sin, recs, false);
+    return html;
+  }
+  function bindRecurrentes(root, recs, clientId, onDone) {
+    var byId = {};
+    recs.forEach(function (r) { byId[r.id] = r; });
+    var add = $('#recAddBtn', root);
+    if (add) add.addEventListener('click', function () { openRecDialog(null, clientId, onDone); });
+    $$('[data-rec-edit]', root).forEach(function (b) {
+      b.addEventListener('click', function () { openRecDialog(byId[b.getAttribute('data-rec-edit')], clientId, onDone); });
+    });
+    $$('[data-rec-activo]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var r = byId[b.getAttribute('data-rec-activo')], val = b.getAttribute('data-valor') === '1' ? 1 : 0;
+        if (!val && !confirm('¿Desactivar «' + r.nombre + '»? Deja de controlarse y sus avisos salen de «Qué hacer». Puedes reactivarlo después.')) return;
+        busy(b, true);
+        api('PATCH', '/api/recurrentes/' + encodeURIComponent(r.id), { activo: val })
+          .then(function () { toast(val ? 'Servicio reactivado.' : 'Servicio desactivado.', 'ok'); onDone(); })
+          .catch(function (e) { busy(b, false); toastErr(e); });
+      });
+    });
+    $$('[data-rec-del]', root).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var r = byId[b.getAttribute('data-rec-del')];
+        if (!confirm('¿Eliminar «' + r.nombre + '»? Si tiene facturas asignadas a mano, solo se desactiva.')) return;
+        busy(b, true);
+        api('DELETE', '/api/recurrentes/' + encodeURIComponent(r.id))
+          .then(function (res) {
+            toast(res && res.deleted ? 'Servicio eliminado.' : 'Tenía facturas asignadas a mano: quedó desactivado.', 'ok');
+            onDone();
+          })
+          .catch(function (e) { busy(b, false); toastErr(e); });
+      });
+    });
+    bindRecSelectores(root, onDone);
+  }
+
+  // Formulario agregar / editar servicio recurrente.
+  function openRecDialog(r, clientId, onSaved) {
+    getClients().catch(function () { return []; }).then(function () {
+      var isNew = !r;
+      var d = r || { unidad: 'UF', periodicidad: 'mensual', cuando_facturar: 'mes_siguiente', facturas_por_mes: 1, hito_inicial: 1, concepto: 'servicio mensual', desde: monthISO(0), client_id: clientId };
+      var montoTxt = isNum(d.monto) ? String(d.monto).replace('.', ',') : '';
+      var dlg = openDialog(isNew ? 'Agregar servicio recurrente' : 'Editar servicio recurrente',
+        '<form id="recForm" novalidate><div class="form-grid">' +
+        (clientId ? '' : fld({ label: 'Cliente', name: 'client_id', type: 'select', required: true, optionsHtml: clientOptions(d.client_id || '', 'Elige un cliente…') })) +
+        fld({ label: 'Nombre del servicio', name: 'nombre', value: d.nombre, required: true, full: true, placeholder: 'Ej: Biznet Point, Soporte ambiente Linux' }) +
+        fld({ label: 'Monto', name: 'monto', value: montoTxt, required: true, attrs: 'inputmode="decimal"', help: 'Neto, sin IVA. Ej: 373,11 UF o 7.071.225 pesos.' }) +
+        fld({ label: 'Unidad', name: 'unidad', type: 'select', value: d.unidad, options: REC_UNIDADES }) +
+        fld({ label: 'Periodicidad', name: 'periodicidad', type: 'select', value: d.periodicidad, options: [['mensual', 'Mensual'], ['anual', 'Anual (ej. licencia)']] }) +
+        fld({ label: 'Facturas por mes', name: 'facturas_por_mes', type: 'number', value: d.facturas_por_mes || 1, attrs: 'min="1" max="12" step="1"', help: 'ENGIE emite 2.' }) +
+        fld({ label: 'Desde (primer mes de servicio)', name: 'desde', type: 'month', value: d.desde, required: true }) +
+        fld({ label: 'Hasta (opcional)', name: 'hasta', type: 'month', value: d.hasta || '', help: 'Vacío = vigente, sin término.' }) +
+        fld({ label: 'Controlar desde (opcional)', name: 'control_desde', type: 'month', value: d.control_desde || '', help: 'Si el sistema no tiene facturas de los primeros meses, el control parte aquí y no los marca como faltantes.' }) +
+        fld({ label: 'Cuándo se factura', name: 'cuando_facturar', type: 'select', value: d.cuando_facturar, options: [['mes_siguiente', 'El mes siguiente al servicio'], ['mismo_mes', 'El mismo mes del servicio']] }) +
+        fld({ label: 'Día límite para facturar (opcional)', name: 'dia_limite', type: 'number', value: d.dia_limite || '', attrs: 'min="1" max="31" step="1"', help: 'Vacío = hasta fin de mes. Pasado el plazo, el mes sale como «Falta facturar».' }) +
+        fld({ label: 'Orden de compra (OC)', name: 'oc', value: d.oc }) +
+        fld({ label: 'Total de hitos (opcional)', name: 'total_hitos', type: 'number', value: d.total_hitos || '', attrs: 'min="1" step="1"', help: 'Ej: una OC por 12 hitos.' }) +
+        fld({ label: 'Hito del primer mes', name: 'hito_inicial', type: 'number', value: d.hito_inicial || 1, attrs: 'min="1" step="1"' }) +
+        fld({ label: 'Concepto de sus facturas', name: 'concepto', type: 'select', value: d.concepto || 'servicio mensual', options: CONCEPTOS.map(function (x) { return [x, x.charAt(0).toUpperCase() + x.slice(1)]; }) }) +
+        fld({ label: 'Patrón en la glosa (opcional)', name: 'patron', value: d.patron, full: true, placeholder: 'Ej: TRACKER|TECNICO', help: 'Palabras separadas por | que identifican sus facturas cuando el cliente tiene varios servicios. Si no alcanza, se usa el monto en UF de la glosa, ej. "(35 UF)".' }) +
+        fld({ label: 'Notas', name: 'notas', type: 'textarea', value: d.notas, full: true }) +
+        (isNew ? '' : fld({ label: 'Activo (se controla y avisa en «Qué hacer»)', name: 'activo', type: 'checkbox', value: d.activo })) +
+        '</div><div id="recMsg"></div><div class="form-actions"><button type="button" class="btn secondary" data-close>Cancelar</button>' +
+        '<button type="submit" class="btn">' + (isNew ? 'Agregar' : 'Guardar') + '</button></div></form>', { wide: true });
+      var form = $('#recForm', dlg), msg = $('#recMsg', dlg);
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var f = readForm(form);
+        if (!f.nombre) { showMsg(msg, 'Escribe el nombre del servicio.'); return; }
+        var monto = parseMonto(f.monto);
+        if (monto === null || isNaN(monto) || monto <= 0) { showMsg(msg, 'El monto debe ser un número mayor que cero (ej. 373,11 o 7.071.225).'); return; }
+        if (!f.desde) { showMsg(msg, 'Indica desde qué mes se presta el servicio.'); return; }
+        if (f.hasta && f.hasta < f.desde) { showMsg(msg, '«Hasta» no puede ser anterior a «desde».'); return; }
+        var body = {
+          nombre: f.nombre, monto: monto, unidad: f.unidad, periodicidad: f.periodicidad, facturas_por_mes: f.facturas_por_mes || 1,
+          desde: f.desde, hasta: f.hasta || null, control_desde: f.control_desde || null, cuando_facturar: f.cuando_facturar,
+          dia_limite: f.dia_limite || null, oc: f.oc || null, total_hitos: f.total_hitos || null, hito_inicial: f.hito_inicial || 1,
+          concepto: f.concepto, patron: f.patron || null, notas: f.notas || null
+        };
+        if (isNew) body.client_id = clientId || f.client_id || null;
+        else body.activo = f.activo;
+        if (isNew && !body.client_id) { showMsg(msg, 'Elige el cliente.'); return; }
+        var btn = $('button[type=submit]', form);
+        busy(btn, true, 'Guardando…');
+        api(isNew ? 'POST' : 'PATCH', isNew ? '/api/recurrentes' : '/api/recurrentes/' + encodeURIComponent(r.id), body).then(function () {
+          dlg.close();
+          toast(isNew ? 'Servicio recurrente agregado.' : 'Servicio recurrente guardado.', 'ok');
+          if (onSaved) onSaved(); else rerenderKeepScroll();
+        }).catch(function (e) { busy(btn, false); showMsg(msg, e.message); });
+      });
+    });
+  }
+
+  // Vista general: todos los clientes con sus recurrentes, últimos 12 meses y lo que falta arriba.
+  function viewRecurrentes(ctx) {
+    var verInactivos = ctx.query.inactivos === '1';
+    return Promise.all([api('GET', '/api/recurrentes'), getClients().catch(function () { return []; })]).then(function (res) {
+      if (ctx.stale()) return;
+      var d = res[0] || {}, s = d.resumen || {};
+      var recs = list(d.recurrentes), meses = list(d.meses), falt = list(d.faltantes), sin = list(d.sin_asignar);
+      var tot = d.totales_mes || {};
+      var visibles = recs.filter(function (r) { return verInactivos || r.activo; });
+      var html = pageHead('Servicios recurrentes', 'Lo que se factura todos los meses a cada cliente: qué meses están pagados, por cobrar o faltan por facturar.',
+        '<button type="button" class="btn" id="recAddBtn">Agregar servicio</button>');
+      var totTxt = Object.keys(tot).map(function (u) { return recMonto(tot[u], u); });
+      html += '<div class="stats">' +
+        statCard({ label: 'Esperado al mes', value: esc(totTxt.join(' + ') || '—'), desc: 'Suma de los servicios mensuales vigentes este mes (neto).' + (list(d.anuales).length ? ' Aparte, ' + list(d.anuales).length + ' anual(es): ' + list(d.anuales).map(function (a) { return a.nombre + ' ' + recMonto(a.monto, a.unidad); }).join(', ') + '.' : ''), kind: 'info' }) +
+        statCard({ label: 'Meses al día', value: esc(entero(s.meses_al_dia)), desc: 'Meses facturados (pagados o por cobrar) de los ' + esc(entero(s.recurrentes)) + ' servicios activos.', kind: 'ok' }) +
+        statCard({ label: 'Falta facturar', value: esc(entero(s.faltan)), desc: 'Meses cuyo plazo para facturar ya pasó y no tienen factura vigente.', kind: num(s.faltan) ? 'bad' : 'ok' }) +
+        statCard({ label: 'Por cobrar', value: esc(clp(s.por_cobrar)), desc: 'Saldo de las facturas de estos servicios.', kind: num(s.por_cobrar) ? 'warn' : 'ok' }) +
+        (num(s.duplicados) || num(s.sin_asignar) ? statCard({ label: 'A revisar', value: esc(entero(num(s.duplicados) + num(s.sin_asignar))), desc: num(s.duplicados) + ' mes(es) con facturas de más y ' + num(s.sin_asignar) + ' factura(s) sin asignar.', kind: 'warn' }) : '') +
+        '</div>';
+      if (falt.length) {
+        // agrupado por servicio: "ACT · Biznet Point (440 UF): Sep 2025, Oct 2025…"
+        var grupos = [], porRec = {};
+        falt.forEach(function (f) {
+          if (!porRec[f.recurrente_id]) { porRec[f.recurrente_id] = { f: f, meses: [] }; grupos.push(porRec[f.recurrente_id]); }
+          porRec[f.recurrente_id].meses.push(f);
+        });
+        html += '<section class="card" aria-labelledby="recFaltTitle"><h2 id="recFaltTitle">Falta facturar (' + esc(falt.length) + (falt.length === 1 ? ' mes' : ' meses') + ')</h2>' +
+          '<p class="help">Meses cuyo plazo para facturar ya pasó y no tienen factura vigente, por servicio (del más antiguo al más reciente).</p><ul class="rec-falt">' +
+          grupos.map(function (g) {
+            var f = g.f;
+            return '<li><strong>' + esc(f.client_short || f.client_name || clientName(f.client_id)) + '</strong> · ' + esc(f.nombre) +
+              ' <span class="muted">(' + esc(recMonto(f.monto, f.unidad)) + ')</span>: ' +
+              esc(g.meses.map(function (x) { return fmes(x.mes) + (x.hito ? ' (hito ' + x.hito + ')' : ''); }).join(', ')) +
+              ' <a href="#/cliente/' + esc(f.client_id) + '">Ver cliente</a></li>';
+          }).join('') + '</ul></section>';
+      }
+      html += recSinAsignarHtml(sin, recs, true);
+      html += '<section class="card" aria-labelledby="recAllTitle"><div class="card-head"><h2 id="recAllTitle">Últimos 12 meses</h2>' +
+        '<div class="fld check"><input type="checkbox" id="chkRecInact"' + (verInactivos ? ' checked' : '') + '><label for="chkRecInact">Mostrar inactivos</label></div></div>' +
+        recLeyenda() +
+        '<div class="table-wrap"><table class="rec-tabla"><thead><tr><th scope="col">Cliente</th><th scope="col">Servicio</th><th scope="col" class="num">Monto</th>' +
+        '<th scope="col">Meses (' + esc(fmes(meses[0])) + ' a ' + esc(fmes(meses[meses.length - 1])) + ')</th><th scope="col">Resumen</th></tr></thead><tbody>';
+      if (!visibles.length) html += emptyRow(5, 'No hay servicios recurrentes. Agrégalos desde aquí o desde la ficha de cada cliente.');
+      var prev = null;
+      visibles.forEach(function (r) {
+        var nuevoCli = r.client_id !== prev;
+        prev = r.client_id;
+        html += '<tr class="' + (nuevoCli ? 'rec-cli-ini' : '') + (r.activo ? '' : ' row-ignored') + '"><td>' + (nuevoCli ? '<a href="#/cliente/' + esc(r.client_id) + '">' + esc(r.client_short || r.client_name || clientName(r.client_id)) + '</a>' : '<span class="sr-only">' + esc(r.client_short || r.client_name || '') + '</span>') + '</td>' +
+          '<td>' + esc(r.nombre) + '<span class="sub">' + esc(recVigencia(r)) + (r.oc ? ' · OC ' + esc(r.oc) : '') + (recHitos(r) ? ' · ' + esc(recHitos(r)) : '') + (r.activo ? '' : ' · inactivo') + '</span></td>' +
+          '<td class="num nowrap">' + esc(recMonto(r.monto, r.unidad)) + (r.periodicidad === 'anual' ? '<span class="sub">al año</span>' : '') + '</td>' +
+          '<td class="rec-celda">' + recGrid(r, meses, true) + '</td><td class="desc small">' + esc(recResumenTxt(r)) + '</td></tr>';
+      });
+      html += '</tbody></table></div></section>';
+      viewEl.innerHTML = html;
+      $('#recAddBtn').addEventListener('click', function () { openRecDialog(null, null, rerenderKeepScroll); });
+      $('#chkRecInact').addEventListener('change', function (e) { go('#/recurrentes' + (e.target.checked ? '?inactivos=1' : '')); });
+      bindRecSelectores(viewEl, rerenderKeepScroll);
     });
   }
 
@@ -2899,6 +3235,20 @@
     });
     // "Qué hacer": Hecho / Descartar / F29 presentado / Ya lo pagué (tareas) y "Agregar tarea"
     document.addEventListener('click', function (ev) {
+      // varios avisos juntos (meses que faltan de un servicio recurrente): se descartan todos
+      var bd = ev.target && ev.target.closest ? ev.target.closest('[data-tareas-descartar]') : null;
+      if (bd) {
+        var ids = bd.getAttribute('data-tareas-descartar').split(',').filter(Boolean);
+        if (!confirm('¿Descartar estos ' + ids.length + ' avisos? Dejarán de aparecer en "Qué hacer" (puedes reabrirlos desde las tareas cerradas).')) return;
+        bd.disabled = true;
+        ids.reduce(function (p, tid) {
+          return p.then(function () { return api('PATCH', '/api/tareas/' + encodeURIComponent(tid), { estado: 'descartada' }); });
+        }, Promise.resolve()).then(function () {
+          toast('Avisos descartados.', 'ok');
+          rerenderKeepScroll();
+        }).catch(function (e) { bd.disabled = false; toastErr(e); rerenderKeepScroll(); });
+        return;
+      }
       var b = ev.target && ev.target.closest ? ev.target.closest('[data-tarea-id][data-tarea-estado]') : null;
       if (b) {
         var est = b.getAttribute('data-tarea-estado');

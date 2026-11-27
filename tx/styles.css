@@ -365,3 +365,45 @@ td.dias-vencida { color: var(--accent, #C8102E); font-weight: 700; background: #
 .qh-cerradas-ul li { padding: .2rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .acc-groups fieldset.acc-check { margin-bottom: .5rem; }
 .acc-resumen { font-weight: 600; margin: .3rem 0 0; }
+
+/* ---- Servicios recurrentes: grilla de meses (verde pagado, azul por cobrar, rojo falta, gris por facturar,
+   ámbar facturas de más). Cada chip lleva además un símbolo, para no depender solo del color. ---- */
+.rec-grid { list-style: none; display: flex; flex-wrap: wrap; gap: 4px; margin: .4rem 0 0; padding: 0; }
+.rec-mes { display: inline-block; min-width: 4.6em; padding: .15rem .35rem; border: 1px solid transparent; border-radius: 4px;
+  font-size: .74rem; font-weight: 600; text-align: center; white-space: nowrap; cursor: default; }
+.rec-mes b { font-weight: 700; }
+.rec-mes:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rec-mes.pagado { background: var(--ok-bg); color: var(--ok); border-color: #b5dfc4; }
+.rec-mes.facturado { background: #e5eefb; color: #1d4f91; border-color: #b4cbee; }
+.rec-mes.falta { background: var(--bad-bg); color: var(--bad); border-color: #f5b8b2; }
+.rec-mes.por_facturar { background: var(--muted-bg); color: var(--muted-c); border-color: #d5d9df; }
+.rec-mes.duplicado { background: #fff1cc; color: #7a4f00; border-color: #efc35c; }
+.rec-mes.vacio { background: transparent; color: #9aa3af; border: 1px dashed var(--border); font-weight: 400; }
+.rec-leyenda { color: var(--muted); margin: 0 0 .6rem; line-height: 2; }
+.rec-leyenda .rec-mes { min-width: 1.8em; }
+.rec-item { border-top: 1px solid var(--border); padding: .8rem 0 .6rem; }
+.rec-item:first-of-type { border-top: 0; }
+.rec-item.inactivo { opacity: .7; }
+.rec-head { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; }
+.rec-head h3 { margin: 0; font-size: 1.02rem; }
+.rec-monto { font-weight: 700; color: var(--accent); }
+.rec-head .rec-acc { margin-left: auto; }
+.rec-meta, .rec-notas, .rec-res { margin: .25rem 0 0; color: var(--muted); }
+.rec-notas { font-style: italic; }
+.rec-res { color: var(--text); font-weight: 600; }
+.rec-docs { margin-top: .5rem; }
+.rec-docs summary { cursor: pointer; color: var(--primary); font-size: .9rem; }
+.rec-docs .table-wrap { margin-top: .4rem; }
+.rec-falt { margin: 0; padding-left: 1.2em; }
+.rec-falt li { margin: 0 0 .35rem; }
+.rec-tabla td.rec-celda { min-width: 640px; }
+.rec-tabla .rec-grid { flex-wrap: nowrap; margin: 0; }
+.rec-tabla td:nth-child(2) { min-width: 230px; }
+.rec-tabla .rec-mes { min-width: 3.9em; padding: .15rem .25rem; }
+.rec-tabla tr.rec-cli-ini td { border-top: 2px solid var(--border-strong); }
+.rec-sin select { max-width: 260px; }
+/* los textos .sr-only de las tablas (posición absoluta) no deben ensanchar la página */
+.rec-tabla, .rec-sin table, .rec-docs table { position: relative; }
+@media (max-width: 600px) {
+  .rec-head .rec-acc { margin-left: 0; }
+}
