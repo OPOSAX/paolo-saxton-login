@@ -1830,7 +1830,7 @@
         '<form id="pfForm" novalidate><p class="help">Proyectos, hitos o trabajos puntuales que hay que facturar. Los servicios de todos los meses van en Recurrentes. Queda esperando hasta que llega su factura: se marca emitida sola si el neto calza con el monto.</p><div class="form-grid">' +
         (clientId && isNew ? '' : fld({ label: 'Cliente', name: 'client_id', type: 'select', required: true, optionsHtml: clientOptions(d.client_id || '', 'Elige un cliente…') })) +
         fld({ label: 'Qué se factura', name: 'concepto', value: d.concepto, required: true, full: true, placeholder: 'Ej: Hito 2 proyecto EPV, instalación de sensores' }) +
-        fld({ label: 'Monto (neto)', name: 'monto', value: montoTxt, required: true, attrs: 'inputmode="decimal"', help: 'Sin IVA. Ej: 120,5 UF o 1.500.000 pesos.' }) +
+        fld({ label: 'Monto (neto)', name: 'monto', value: montoTxt, attrs: 'inputmode="decimal"', help: 'Sin IVA. Ej: 120,5 UF o 1.500.000 pesos. Vacío si aún no se sabe (queda «por confirmar»).' }) +
         fld({ label: 'Unidad', name: 'unidad', type: 'select', value: d.unidad || 'UF', options: REC_UNIDADES }) +
         fld({ label: 'Mes en que se factura', name: 'mes_facturar', type: 'month', value: d.mes_facturar, required: true }) +
         fld({ label: 'Plazo para facturar (opcional)', name: 'vence', type: 'date', value: d.vence || '', help: 'Vacío = fin de ese mes.' }) +
@@ -1854,8 +1854,8 @@
         ev.preventDefault();
         var f = readForm(form);
         if (!f.concepto) { showMsg(msg, 'Escribe qué se va a facturar.'); return; }
-        var monto = parseMonto(f.monto);
-        if (monto === null || isNaN(monto) || monto <= 0) { showMsg(msg, 'El monto debe ser un número mayor que cero (ej. 120,5 o 1.500.000).'); return; }
+        var monto = String(f.monto || '').trim() ? parseMonto(f.monto) : null;
+        if (String(f.monto || '').trim() && (monto === null || isNaN(monto) || monto <= 0)) { showMsg(msg, 'El monto debe ser un número mayor que cero (ej. 120,5 o 1.500.000), o déjalo vacío si aún no se sabe.'); return; }
         if (!f.mes_facturar) { showMsg(msg, 'Indica el mes en que se factura.'); return; }
         var body = { concepto: f.concepto, monto: monto, unidad: f.unidad, mes_facturar: f.mes_facturar, vence: f.vence || null, oc: f.oc || null, espera: f.espera || null, notas: f.notas || null };
         var cid = f.client_id || (isNew ? clientId : null);
@@ -1940,7 +1940,8 @@
       var aparte = Object.keys(sinConv).map(function (u) { return recMonto(sinConv[u], u); });
       var montoDesc = 'Neto de lo que falta emitir (atrasadas, por emitir y esperando).' +
         (num(t.monto_por_emitir_uf) && t.uf_valor ? ' UF convertida a ' + clp(t.uf_valor) + '.' : '') +
-        (aparte.length ? ' Aparte, sin convertir: ' + aparte.join(' + ') + (t.uf_valor ? '' : ' (no hay valor UF cargado)') + '.' : '');
+        (aparte.length ? ' Aparte, sin convertir: ' + aparte.join(' + ') + (t.uf_valor ? '' : ' (no hay valor UF cargado)') + '.' : '') +
+        (num(t.sin_monto) ? ' Sin contar ' + t.sin_monto + ' con monto por confirmar.' : '');
       html += '<div class="stats">' +
         statCard({ label: 'Atrasadas', value: esc(entero(t.atrasada)), desc: 'Ya pasó el plazo y no se han emitido' + (num(t.de_otro_mes) ? ' (incluye ' + t.de_otro_mes + ' de meses anteriores).' : '.'), kind: num(t.atrasada) ? 'bad' : 'ok' }) +
         statCard({ label: 'Por emitir', value: esc(entero(t.por_emitir)), desc: 'Dentro del plazo.', kind: num(t.por_emitir) ? 'warn' : 'ok' }) +
