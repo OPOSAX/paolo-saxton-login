@@ -835,8 +835,22 @@
         return '<li class="qh ' + (q.nivel === 'urgente' ? 'urgente' : 'pendiente') + '">' +
           (q.nivel === 'urgente' ? '<span class="qh-tag">Urgente</span>' : '') +
           '<strong>' + esc(q.titulo) + '</strong><span class="qh-txt">' + esc(q.texto || '') + '</span>' +
-          (href ? '<a href="' + esc(href) + '">Ver</a>' : '') + '</li>';
+          (href ? '<a href="' + esc(href) + '">Ver</a>' : '') +
+          (q.alerta_id ? ' <button type="button" class="btn link small" data-sii-vista="' + esc(q.alerta_id) + '">Marcar como vista</button>' : '') + '</li>';
       }).join('') + '</ol>' : '<p class="muted">' + esc(vacio || 'Nada pendiente. Todo en orden.') + '</p>') + '</section>';
+  }
+
+  // Banner del Resumen con los reclamos nuevos que detectó el monitoreo del SII (hasta marcarlos como vistos).
+  function siiBannerHtml(sa) {
+    if (!sa.length) return '';
+    return '<section class="card sii-banner" aria-labelledby="siiBanTitle"><div class="card-head"><h2 id="siiBanTitle">' +
+      (sa.length === 1 ? 'Reclamo nuevo en el SII' : esc(sa.length) + ' reclamos nuevos en el SII') + '</h2>' +
+      '<a class="small" href="#/ajustes">Monitoreo SII</a></div><ul class="alerts">' + sa.map(function (a) {
+        var href = /^#\//.test(a.link || '') ? a.link : '';
+        return '<li class="alert roja"><span><span class="lvl">Reclamo</span>' + esc(a.texto) + '</span><span class="btn-row">' +
+          (href ? '<a href="' + esc(href) + '">Ver factura</a> ' : '') +
+          '<button type="button" class="btn small secondary" data-sii-vista="' + esc(a.id) + '">Marcar como vista</button></span></li>';
+      }).join('') + '</ul></section>';
   }
 
   function viewDashboard(ctx) {
@@ -849,6 +863,7 @@
       });
       var html = pageHead('Resumen', 'Cómo va la facturación y la cobranza de todos tus clientes.',
         '<a class="btn secondary" href="#/banco">Subir cartolas</a><button type="button" class="btn" id="addClientBtn">Agregar cliente</button>');
+      html += siiBannerHtml(list(d.sii_alertas, 'sii_alertas'));
       html += queHacerBox(list(d.que_hacer, 'que_hacer'), 'Qué hacer ahora', '');
       html += '<div class="stats">' +
         statCard({ label: 'Facturado (12 meses)', value: esc(clp(t.facturado)), desc: 'Total facturado en los últimos 12 meses.', kind: 'info', href: '#/documentos' }) +
@@ -2163,6 +2178,136 @@
     return (parts.length ? '<p class="tag-list">' + parts.join('') + '</p>' : '') + last;
   }
 
+  /* SII · monitoreo de reclamos: certificado digital (.pfx/.p12 + clave), opciones y última revisión. */
+  function siiSectionHtml(st) {
+    var c = st.certificado || null;
+    var horas = (st.horas || []).join(' y ');
+    var h = '<p class="help">Con el certificado digital (archivo .pfx o .p12 y su clave), TX entra solo al SII ' +
+      (horas ? 'a las ' + esc(horas) + ' (hora de Chile)' : 'dos veces al día') + ' y revisa si algún cliente reclamó las facturas de los últimos ' +
+      esc(entero(st.dias)) + ' días. Si encuentra un reclamo, marca la factura como reclamada, te lo avisa en "Qué hacer" y te manda un correo. ' +
+      'El titular del certificado debe ser representante legal o usuario autorizado de BizNet en el SII. El certificado y su clave se guardan cifrados: nunca se muestran ni van en los respaldos.</p>';
+    var chips = [];
+    if (!st.configurado || !c) chips.push('<span class="chip warn">Sin certificado</span>');
+    else if (c.vencido) chips.push('<span class="chip bad">Certificado vencido</span>');
+    else if (isNum(c.dias_para_vencer) && Number(c.dias_para_vencer) <= 30) chips.push('<span class="chip warn">El certificado vence en ' + esc(entero(c.dias_para_vencer)) + ' días</span>');
+    else chips.push('<span class="chip ok">Certificado cargado</span>');
+    if (st.configurado) chips.push(st.habilitado ? '<span class="chip ok">Revisión automática activa</span>' : '<span class="chip warn">Revisión automática desactivada</span>');
+    if (num(st.alertas_no_vistas)) chips.push('<span class="chip bad">' + esc(entero(st.alertas_no_vistas)) + ' reclamo(s) sin ver</span>');
+    h += '<p class="tag-list">' + chips.join('') + '</p>';
+    if (st.llave && st.llave.aviso && st.configurado) h += '<p class="help warn">' + esc(st.llave.aviso) + '</p>';
+    if (c) {
+      h += '<dl class="kv"><dt>Titular</dt><dd>' + esc(c.titular || '—') + '</dd>' +
+        '<dt>RUT del titular</dt><dd>' + esc(c.rut || 'no viene en el certificado') + '</dd>' +
+        '<dt>Emitido por</dt><dd>' + esc(c.emisor || '—') + '</dd>' +
+        '<dt>Vigente</dt><dd>desde ' + esc(fdate(c.desde)) + ' hasta el <strong>' + esc(fdate(c.vence)) + '</strong></dd>' +
+        '<dt>Cargado</dt><dd>' + esc(fdatetime(c.subido)) + (c.subido_por ? ' por ' + esc(c.subido_por) : '') + '</dd></dl>';
+    }
+    var u = st.ultima;
+    if (u && typeof u === 'object') {
+      var errs = jsonList(u.errors);
+      h += '<p class="small muted">Última revisión: ' + esc(fdatetime(u.fin || u.fecha)) + (u.manual ? ' (manual)' : ' (automática)') +
+        ' · ' + esc(entero(u.revisadas)) + ' factura(s) revisada(s) · ' + esc(entero(u.nuevas_reclamadas)) + ' reclamo(s) nuevo(s)' +
+        (u.correo && u.correo !== 'enviado' ? ' · ' + esc(u.correo) : '') +
+        (num(u.errores) ? ' · <span class="chip bad">' + esc(entero(u.errores)) + ' error(es)</span> ' + esc(errs.join(' · ')) : '') + '</p>';
+    }
+    if (st.en_curso) h += '<p class="small muted">Hay una revisión en curso…</p>';
+    if (st.proxima) h += '<p class="small muted">Próxima revisión automática: ' + esc(fdatetime(st.proxima)) +
+      (st.automatico === false ? ' (la revisión automática está apagada en este servidor)' : '') + '.</p>';
+    if (!st.es_admin) {
+      h += '<p class="help">Solo la cuenta administradora puede subir el certificado o cambiar estas opciones.</p>';
+    } else {
+      h += '<div class="split"><form id="siiCertForm" novalidate><h3>' + (c ? 'Reemplazar certificado' : 'Subir certificado') + '</h3>' +
+        fld({ label: 'Archivo del certificado (.pfx o .p12)', name: 'file', type: 'file', attrs: 'accept=".pfx,.p12,application/x-pkcs12"' }) +
+        fld({ label: 'Clave del certificado', name: 'password', type: 'password', attrs: 'autocomplete="off"' }) +
+        '<div class="form-actions">' + (c ? '<button type="button" class="btn danger left" id="siiDelBtn">Eliminar certificado</button>' : '') +
+        '<button type="submit" class="btn">Validar y guardar</button></div><div id="siiCertMsg" aria-live="polite"></div></form>' +
+        '<form id="siiOptForm" novalidate><h3>Opciones</h3><div class="form-grid">' +
+        fld({ label: 'Revisar automáticamente', name: 'habilitado', type: 'checkbox', value: st.habilitado ? 1 : 0 }) +
+        fld({ label: 'Horas de revisión (hora de Chile)', name: 'horas', value: (st.horas || []).join(', '), placeholder: '08:30, 17:30', help: 'Formato HH:MM, separadas por coma (máximo 4).' }) +
+        fld({ label: 'Revisar facturas de los últimos (días)', name: 'dias', type: 'number', value: st.dias, attrs: 'min="1" max="120" step="1"' }) +
+        fld({ label: 'Correo de aviso', name: 'email', type: 'email', value: st.email, placeholder: st.email_destino || '',
+          help: 'Vacío = correo del administrador' + (st.email_destino ? ' (' + st.email_destino + ')' : '') + '.' + (st.smtp_configurado ? '' : ' Ojo: el envío de correo (SMTP) aún no está configurado.') }) +
+        '</div><div class="form-actions"><button type="button" class="btn secondary" id="siiRunBtn"' + (st.configurado ? '' : ' disabled') + '>Revisar ahora</button>' +
+        '<button type="submit" class="btn">Guardar opciones</button></div><div id="siiOptMsg" aria-live="polite"></div></form></div>';
+    }
+    var al = list(st.alertas, 'alertas');
+    if (al.length) {
+      h += '<h3>Reclamos detectados</h3><ul class="alerts">' + al.map(function (a) {
+        var lvl = a.vista ? 'Visto' : (a.resuelta ? 'Resuelto' : 'Nuevo');
+        return '<li class="alert ' + (a.vista || a.resuelta ? 'info' : 'roja') + '"><span><span class="lvl">' + lvl + '</span>' + esc(a.texto) +
+          (a.resuelta && a.motivo ? ' <span class="muted">(' + esc(a.motivo) + ')</span>' : '') + '</span>' +
+          (a.vista ? '' : '<button type="button" class="btn small secondary" data-sii-vista="' + esc(a.id) + '">Marcar como vista</button>') + '</li>';
+      }).join('') + '</ul>';
+    }
+    return h;
+  }
+
+  function loadSii() {
+    var box = $('#siiBody');
+    if (!box) return;
+    api('GET', '/api/sii/monitor').then(function (st) { showSii(st || {}); })
+      .catch(function (e) { if (e.status !== 401 && $('#siiBody')) $('#siiBody').innerHTML = errorHtml(e); });
+  }
+
+  function showSii(st, msgId, msg, ok) {
+    var box = $('#siiBody');
+    if (!box) return;
+    box.innerHTML = siiSectionHtml(st);
+    if (msgId && $(msgId)) showMsg($(msgId), msg, ok);
+    var cf = $('#siiCertForm');
+    if (cf) cf.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var inp = $('input[type=file]', cf), pw = $('[name=password]', cf), mb = $('#siiCertMsg');
+      if (!inp.files || !inp.files.length) { showMsg(mb, 'Elige el archivo del certificado (.pfx o .p12).'); return; }
+      if (!pw.value) { showMsg(mb, 'Escribe la clave del certificado.'); return; }
+      var fd = new FormData();
+      fd.append('file', inp.files[0], inp.files[0].name);
+      fd.append('password', pw.value);
+      var btn = $('button[type=submit]', cf);
+      busy(btn, true, 'Validando…');
+      api('POST', '/api/sii/certificado', fd).then(function (st2) {
+        pw.value = '';
+        showSii(st2 || {}, '#siiCertMsg', 'Certificado válido y guardado' + (st2 && st2.certificado ? ': ' + st2.certificado.titular + ', vence el ' + fdate(st2.certificado.vence) : '') + '.', true);
+      }).catch(function (e) { busy(btn, false); pw.value = ''; showMsg(mb, e.message); });
+    });
+    var del = $('#siiDelBtn');
+    if (del) del.addEventListener('click', function () {
+      if (!confirm('¿Eliminar el certificado digital guardado? La revisión de reclamos en el SII se detiene hasta que subas otro.')) return;
+      busy(del, true, 'Eliminando…');
+      api('DELETE', '/api/sii/certificado').then(function (st2) { showSii(st2 || {}, '#siiCertMsg', 'Certificado eliminado.', true); })
+        .catch(function (e) { busy(del, false); toastErr(e); });
+    });
+    var of = $('#siiOptForm');
+    if (of) of.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = readForm(of), btn = $('button[type=submit]', of);
+      busy(btn, true, 'Guardando…');
+      api('POST', '/api/sii/opciones', { habilitado: !!f.habilitado, horas: f.horas, dias: Number(f.dias), email: f.email })
+        .then(function (st2) { showSii(st2 || {}, '#siiOptMsg', 'Opciones guardadas.', true); })
+        .catch(function (e) { busy(btn, false); showMsg($('#siiOptMsg'), e.message); });
+    });
+    var run = $('#siiRunBtn');
+    if (run) run.addEventListener('click', function () {
+      var prev = st.ultima ? (st.ultima.fin || st.ultima.fecha || '') : '';
+      busy(run, true, 'Revisando en el SII…');
+      api('POST', '/api/sii/revisar').then(function () {
+        var n = 0;
+        var poll = function () {
+          if (!$('#siiBody')) return; // se fue de Ajustes
+          n += 1;
+          api('GET', '/api/sii/monitor').then(function (st2) {
+            var u = st2 && st2.ultima, fin = u ? (u.fin || u.fecha || '') : '';
+            if ((st2.en_curso || fin === prev) && n < 100) { setTimeout(poll, 3000); return; }
+            var txt = u && fin !== prev ? ('Revisión terminada: ' + entero(u.revisadas) + ' factura(s) revisada(s), ' + entero(u.nuevas_reclamadas) +
+              ' reclamo(s) nuevo(s)' + (num(u.errores) ? ', ' + entero(u.errores) + ' error(es).' : '.')) : 'La revisión sigue en curso: vuelve a mirar en unos minutos.';
+            showSii(st2 || {}, '#siiOptMsg', txt, !!(u && u.ok && fin !== prev));
+          }).catch(function (e) { busy(run, false); toastErr(e); });
+        };
+        setTimeout(poll, 2000);
+      }).catch(function (e) { busy(run, false); showMsg($('#siiOptMsg'), e.message); });
+    });
+  }
+
   function viewSettings(ctx) {
     return Promise.all([api('GET', '/api/settings'), api('GET', '/api/auth/me').catch(function (e) { if (e.status === 401) throw e; return {}; })]).then(function (res) {
       if (ctx.stale()) return;
@@ -2170,7 +2315,7 @@
       var s = (r && (r.settings || r.ajustes)) || r || {};
       var u = currentUser() || {};
       if (me.email) u.email = me.email;
-      var html = pageHead('Ajustes', 'Correo, cartolas, tu clave, importación de datos, respaldo y registro de cambios.');
+      var html = pageHead('Ajustes', 'Correo, cartolas, certificado del SII, tu clave, importación de datos, respaldo y registro de cambios.');
 
       html += '<section class="card" aria-labelledby="mailTitle"><h2 id="mailTitle">Correo</h2>' +
         '<p class="help">Para Yahoo debes usar una <strong>clave de aplicación</strong> (no tu clave normal): en Yahoo ve a Seguridad de la cuenta → Generar clave de aplicación. ' +
@@ -2204,6 +2349,9 @@
         '<button type="button" class="btn secondary" id="testMailBtn">Enviar correo de prueba</button>' +
         '<button type="button" class="btn secondary" id="pollBtn2">Revisar correo ahora</button>' +
         '<button type="submit" class="btn">Guardar ajustes</button></div><div id="mailResult" aria-live="polite"></div></form></section>';
+
+      html += '<section class="card" id="siiBox" aria-labelledby="siiTitle"><h2 id="siiTitle">SII · monitoreo de reclamos</h2>' +
+        '<div id="siiBody">' + loadingHtml() + '</div></section>';
 
       html += '<section class="card" aria-labelledby="pwTitle"><h2 id="pwTitle">Mi clave</h2>' +
         '<p class="help">Usuario: <strong>' + esc(u.username || '—') + '</strong>' + (u.email ? ' · Correo de recuperación: ' + esc(u.email) : '') + '</p>' +
@@ -2292,6 +2440,7 @@
       });
 
       bindChangePassword(viewEl, false);
+      loadSii();
 
       // Códigos de recuperación nuevos
       $('#rcForm').addEventListener('submit', function (ev) {
@@ -2397,6 +2546,15 @@
       (h1 || document.getElementById('main')).focus();
     });
     window.addEventListener('hashchange', render);
+    // "Marcar como vista" de los reclamos detectados en el SII (Resumen, ficha de cliente y Ajustes)
+    document.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('[data-sii-vista]') : null;
+      if (!b) return;
+      b.disabled = true;
+      api('POST', '/api/sii/alertas/' + encodeURIComponent(b.getAttribute('data-sii-vista')) + '/vista', {})
+        .then(function () { toast('Reclamo marcado como visto.', 'ok'); render(); })
+        .catch(function (e) { b.disabled = false; toastErr(e); });
+    });
 
     // Si hay sesión, refrescar datos del usuario (y must_change) antes de mostrar.
     var r = parseHash();

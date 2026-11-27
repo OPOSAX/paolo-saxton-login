@@ -95,6 +95,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px 16px 64px; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; margin-bottom: .6rem; }
 .card-head h2 { margin: 0; }
 .help { color: var(--muted); font-size: .9rem; margin: -.2rem 0 .8rem; }
+.help.warn { color: var(--warn); background: var(--warn-bg); border: 1px solid #f0d394; border-radius: 6px; padding: .5rem .7rem; margin: .2rem 0 .8rem; }
 
 /* Tarjetas de totales */
 .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
@@ -295,6 +296,8 @@ tr.hidden { display: none; }
   .tbl-opt tfoot tr:not(.total-te-deben) { display: none; }
   td.desc { min-width: 140px; }
 }
+/* total "Te deben" al final de las listas de documentos */
+tfoot tr.total-te-deben td { background: #fff5f6; color: var(--accent, #C8102E); font-size: 1.05em; }
 
 /* ---------- Identidad BizNet ---------- */
 .topbar { background: #111111; border-bottom: 3px solid var(--accent); }
@@ -324,6 +327,8 @@ table thead th { background: #111111; color: #fff; text-transform: uppercase; fo
 tr:has(+ tr.accion-row) td { border-bottom: 0 !important; padding-bottom: .25em; }
 tbody tr:hover + tr.accion-row td, tbody tr:has(+ tr.accion-row:hover) td { background: #f8fafc; }
 
-/* total "Te deben" al final de las listas de documentos */
-tfoot tr.total-te-deben td { background: #fff5f6; color: var(--accent, #C8102E); font-size: 1.05em; }
+/* Reclamos nuevos detectados por el monitoreo del SII */
+.sii-banner { border-left: 4px solid var(--bad); }
+.sii-banner .alert .btn-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.qh .btn.link.small { font-size: .9em; padding: 0; }
 td.dias-vencida { color: var(--accent, #C8102E); font-weight: 700; background: #fff5f6; }
