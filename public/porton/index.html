@@ -202,10 +202,6 @@
 <main id="vistaAbrir">
   <form class="tarjeta" id="formAbrir" autocomplete="on">
     <h1>Portón S&amp;H</h1>
-    <div id="camBox" hidden>
-      <div class="cam-video" id="camVideo"></div>
-      <div class="cam-msg" id="camMsg"></div>
-    </div>
     <div class="sub" id="subAbrir">Escribe la clave del evento</div>
     <div class="campo" id="campoClave">
       <label for="aClave">Clave</label>
@@ -355,7 +351,7 @@
 
     <div class="panel">
       <h2>Cámara del portón</h2>
-      <div class="nota">Cámara Reolink de la casa. Con el <b>UID</b> (app Reolink → Info del dispositivo) el servidor entra por la nube de Reolink, como la app, sin abrir puertos; es lo que sirve con Starlink. Sin UID usa el puerto externo del router hacia la IP de la casa. Usa un usuario de la cámara solo para ver (no el admin). La cámara aparece en la página pública después de activar el portón con una clave válida. Deja el usuario vacío para desactivarla.</div>
+      <div class="nota">Cámara Reolink de la casa. Con el <b>UID</b> (app Reolink → Info del dispositivo) el servidor entra por la nube de Reolink, como la app, sin abrir puertos; es lo que sirve con Starlink. Sin UID usa el puerto externo del router hacia la IP de la casa. Usa un usuario de la cámara solo para ver (no el admin). La cámara solo se ve aquí, en Administración (nunca en la página pública). Deja el usuario vacío para desactivarla.</div>
       <div class="form-prog" style="margin-bottom:0">
         <div class="campo"><label for="cCamUser">Usuario cámara</label>
           <input type="text" id="cCamUser" maxlength="32" autocomplete="off"></div>
@@ -440,7 +436,6 @@ async function activarPorton() {
       res.className = 'ok';
       res.textContent = '✔ ' + (d.mensaje || 'Portón activado');
       ocultarClave(true);
-      if (!camPublica) mostrarCamara(clave);
     } else {
       res.className = 'err';
       res.textContent = d.error || 'No se pudo activar';
@@ -456,9 +451,9 @@ async function activarPorton() {
 
 $('formAbrir').addEventListener('submit', (ev) => { ev.preventDefault(); activarPorton(); });
 
-/* ---------- Cámara (video en vivo vía go2rtc, solo con clave válida) ---------- */
+/* ---------- Cámara (video en vivo vía go2rtc, solo administración) ---------- */
 
-let camPublica = null, camAdmin = null, camTimer = 0;
+let camAdmin = null;
 
 // Crea (o reutiliza) el reproductor dentro de `caja` y lo conecta a `ws`.
 async function ponerCamara(caja, el, ws, msg) {
@@ -474,33 +469,12 @@ async function ponerCamara(caja, el, ws, msg) {
     el.ondisconnect();
   }
   caja.hidden = false;
-  if (caja.parentElement && caja.parentElement.id === 'camBox') caja.parentElement.hidden = false;
   msg.textContent = 'Conectando con la cámara…';
   el.src = ws;
   setTimeout(() => {
     if (el.video && el.video.readyState < 2) msg.textContent = 'La cámara no responde por ahora';
   }, 20000);
   return el;
-}
-
-async function mostrarCamara(clave) {
-  try {
-    const r = await fetch(API + '/api/camara/token', {
-      method: 'POST', cache: 'no-store',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({clave})
-    });
-    const d = await r.json();
-    if (!d.ok) {                      // sin cámara o la clave ya no sirve
-      if (camPublica) { camPublica.ondisconnect(); $('camBox').hidden = true; }
-      return;
-    }
-    camPublica = await ponerCamara($('camVideo'), camPublica, d.ws, $('camMsg'));
-    // renovar el permiso antes de que venza
-    clearTimeout(camTimer);
-    camTimer = setTimeout(() => mostrarCamara(clave),
-                          Math.max(300, (d.expira_seg || 7200) - 600) * 1000);
-  } catch (e) { /* sin cámara: la página sigue funcionando */ }
 }
 
 /* ================= Sesión admin ================= */
