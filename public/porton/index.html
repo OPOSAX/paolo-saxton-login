@@ -355,12 +355,14 @@
 
     <div class="panel">
       <h2>Cámara del portón</h2>
-      <div class="nota">Cámara Reolink de la casa. El router reenvía su RTSP solo hacia el servidor y la dirección de la casa se toma del módulo de relés. Usa un usuario de la cámara solo para ver (no el admin). La cámara aparece en la página pública después de activar el portón con una clave válida. Deja el usuario vacío para desactivarla.</div>
+      <div class="nota">Cámara Reolink de la casa. Con el <b>UID</b> (app Reolink → Info del dispositivo) el servidor entra por la nube de Reolink, como la app, sin abrir puertos; es lo que sirve con Starlink. Sin UID usa el puerto externo del router hacia la IP de la casa. Usa un usuario de la cámara solo para ver (no el admin). La cámara aparece en la página pública después de activar el portón con una clave válida. Deja el usuario vacío para desactivarla.</div>
       <div class="form-prog" style="margin-bottom:0">
         <div class="campo"><label for="cCamUser">Usuario cámara</label>
           <input type="text" id="cCamUser" maxlength="32" autocomplete="off"></div>
         <div class="campo"><label for="cCamClave">Clave cámara</label>
           <input type="password" id="cCamClave" maxlength="64" autocomplete="new-password"></div>
+        <div class="campo" style="flex:1 1 170px"><label for="cCamUid">UID (app Reolink)</label>
+          <input type="text" id="cCamUid" maxlength="32" autocomplete="off" placeholder="Ej: 95270001ABCD1234"></div>
         <div class="campo" style="flex:0 1 120px"><label for="cCamPuerto">Puerto externo</label>
           <input type="number" id="cCamPuerto" min="1" max="65535" value="15554"></div>
         <div class="campo" style="flex:0 1 150px"><label for="cCamCalidad">Calidad</label>
@@ -746,6 +748,7 @@ async function cargarConfig() {
       $('cCamClave').placeholder = d.config.cam_clave_guardada ? '•••• guardada (vacío = no cambiar)' : '';
       $('cCamPuerto').value = d.config.cam_puerto || 15554;
       $('cCamCalidad').value = d.config.cam_calidad || 'sub';
+      $('cCamUid').value = d.config.cam_uid || '';
     }
   } catch (e) { manejarError(e, $('msgConfig'), 'No se pudo cargar'); }
 }
@@ -758,7 +761,8 @@ async function guardarConfig(msgId) {
                                               cam_usuario: $('cCamUser').value.trim(),
                                               cam_clave: $('cCamClave').value,
                                               cam_puerto: parseInt($('cCamPuerto').value) || 15554,
-                                              cam_calidad: $('cCamCalidad').value});
+                                              cam_calidad: $('cCamCalidad').value,
+                                              cam_uid: $('cCamUid').value.trim()});
     msg.className = d.ok ? 'msg ok' : 'msg err';
     msg.textContent = d.ok ? 'Guardado' : (d.error || 'Error al guardar');
     if (d.ok) {
