@@ -64,6 +64,10 @@
   .tarjeta .sub { margin-bottom: 0; }
   .grande { font-size: 1.15rem !important; padding: 12px 14px !important; text-align: center; letter-spacing: .03em; }
   #btnAbrir { padding: 15px; font-size: 1.1rem; }
+  .cam-video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; }
+  .cam-video video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #camAdmin { margin-top: 14px; max-width: 640px; }
+  .cam-msg { min-height: 1.2em; margin-top: 6px; text-align: center; font-size: .8rem; color: var(--muted); }
   .tarjeta [hidden] { display: none !important; }
   #resAbrir { min-height: 1.4em; text-align: center; font-size: .95rem; }
   #resAbrir.ok { color: var(--green); font-weight: 700; font-size: 1.1rem; }
@@ -198,6 +202,10 @@
 <main id="vistaAbrir">
   <form class="tarjeta" id="formAbrir" autocomplete="on">
     <h1>Portón S&amp;H</h1>
+    <div id="camBox" hidden>
+      <div class="cam-video" id="camVideo"></div>
+      <div class="cam-msg" id="camMsg"></div>
+    </div>
     <div class="sub" id="subAbrir">Escribe la clave del evento</div>
     <div class="campo" id="campoClave">
       <label for="aClave">Clave</label>
@@ -340,9 +348,31 @@
           <input type="number" id="cPulso" min="0.5" max="30" step="0.5" value="2"></div>
         <div class="campo" style="flex:1 1 200px"><label for="cMaestra">Llave maestra</label>
           <input type="text" id="cMaestra" maxlength="40" autocomplete="off" placeholder="Vacía = desactivada"></div>
-        <button class="btn prim" onclick="guardarConfig()">Guardar</button>
+        <button class="btn prim" onclick="guardarConfig('msgConfig')">Guardar</button>
       </div>
       <div class="msg" id="msgConfig"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Cámara del portón</h2>
+      <div class="nota">Cámara Reolink de la casa. El router reenvía su RTSP solo hacia el servidor y la dirección de la casa se toma del módulo de relés. Usa un usuario de la cámara solo para ver (no el admin). La cámara aparece en la página pública después de activar el portón con una clave válida. Deja el usuario vacío para desactivarla.</div>
+      <div class="form-prog" style="margin-bottom:0">
+        <div class="campo"><label for="cCamUser">Usuario cámara</label>
+          <input type="text" id="cCamUser" maxlength="32" autocomplete="off"></div>
+        <div class="campo"><label for="cCamClave">Clave cámara</label>
+          <input type="password" id="cCamClave" maxlength="64" autocomplete="new-password"></div>
+        <div class="campo" style="flex:0 1 120px"><label for="cCamPuerto">Puerto externo</label>
+          <input type="number" id="cCamPuerto" min="1" max="65535" value="15554"></div>
+        <div class="campo" style="flex:0 1 150px"><label for="cCamCalidad">Calidad</label>
+          <select id="cCamCalidad">
+            <option value="sub">Liviana (recomendada)</option>
+            <option value="main">Alta</option>
+          </select></div>
+        <button class="btn prim" onclick="guardarConfig('msgCam')">Guardar</button>
+        <button class="btn" onclick="probarCamara()">Ver cámara</button>
+      </div>
+      <div class="msg" id="msgCam"></div>
+      <div class="cam-video" id="camAdmin" hidden></div>
     </div>
   </section>
 </main>
@@ -408,6 +438,7 @@ async function activarPorton() {
       res.className = 'ok';
       res.textContent = '✔ ' + (d.mensaje || 'Portón activado');
       ocultarClave(true);
+      if (!camPublica) mostrarCamara(clave);
     } else {
       res.className = 'err';
       res.textContent = d.error || 'No se pudo activar';
@@ -422,6 +453,53 @@ async function activarPorton() {
 }
 
 $('formAbrir').addEventListener('submit', (ev) => { ev.preventDefault(); activarPorton(); });
+
+/* ---------- Cámara (video en vivo vía go2rtc, solo con clave válida) ---------- */
+
+let camPublica = null, camAdmin = null, camTimer = 0;
+
+// Crea (o reutiliza) el reproductor dentro de `caja` y lo conecta a `ws`.
+async function ponerCamara(caja, el, ws, msg) {
+  await customElements.whenDefined('camara-porton');
+  if (!el) {
+    el = document.createElement('camara-porton');
+    el.mode = 'mse,mjpeg';     // sin WebRTC (el servidor no abre puertos UDP)
+    el.media = 'video';        // sin audio: menos datos
+    caja.appendChild(el);
+    el.video.muted = true;
+    el.video.addEventListener('playing', () => { msg.textContent = ''; });
+  } else {
+    el.ondisconnect();
+  }
+  caja.hidden = false;
+  if (caja.parentElement && caja.parentElement.id === 'camBox') caja.parentElement.hidden = false;
+  msg.textContent = 'Conectando con la cámara…';
+  el.src = ws;
+  setTimeout(() => {
+    if (el.video && el.video.readyState < 2) msg.textContent = 'La cámara no responde por ahora';
+  }, 20000);
+  return el;
+}
+
+async function mostrarCamara(clave) {
+  try {
+    const r = await fetch(API + '/api/camara/token', {
+      method: 'POST', cache: 'no-store',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({clave})
+    });
+    const d = await r.json();
+    if (!d.ok) {                      // sin cámara o la clave ya no sirve
+      if (camPublica) { camPublica.ondisconnect(); $('camBox').hidden = true; }
+      return;
+    }
+    camPublica = await ponerCamara($('camVideo'), camPublica, d.ws, $('camMsg'));
+    // renovar el permiso antes de que venza
+    clearTimeout(camTimer);
+    camTimer = setTimeout(() => mostrarCamara(clave),
+                          Math.max(300, (d.expira_seg || 7200) - 600) * 1000);
+  } catch (e) { /* sin cámara: la página sigue funcionando */ }
+}
 
 /* ================= Sesión admin ================= */
 
@@ -663,17 +741,41 @@ async function cargarConfig() {
     if (d.ok) {
       $('cRele').value = d.config.rele_porton; $('cPulso').value = d.config.pulso_seg;
       $('cMaestra').value = d.config.clave_maestra || '';
+      $('cCamUser').value = d.config.cam_usuario || '';
+      $('cCamClave').value = '';
+      $('cCamClave').placeholder = d.config.cam_clave_guardada ? '•••• guardada (vacío = no cambiar)' : '';
+      $('cCamPuerto').value = d.config.cam_puerto || 15554;
+      $('cCamCalidad').value = d.config.cam_calidad || 'sub';
     }
   } catch (e) { manejarError(e, $('msgConfig'), 'No se pudo cargar'); }
 }
 
-async function guardarConfig() {
-  const msg = $('msgConfig');
+async function guardarConfig(msgId) {
+  const msg = $(msgId || 'msgConfig');
   try {
     const d = await postJSON('/api/config', {rele_porton: parseInt($('cRele').value), pulso_seg: parseFloat($('cPulso').value),
-                                              clave_maestra: $('cMaestra').value.trim()});
+                                              clave_maestra: $('cMaestra').value.trim(),
+                                              cam_usuario: $('cCamUser').value.trim(),
+                                              cam_clave: $('cCamClave').value,
+                                              cam_puerto: parseInt($('cCamPuerto').value) || 15554,
+                                              cam_calidad: $('cCamCalidad').value});
     msg.className = d.ok ? 'msg ok' : 'msg err';
     msg.textContent = d.ok ? 'Guardado' : (d.error || 'Error al guardar');
+    if (d.ok) {
+      $('cCamClave').value = '';
+      $('cCamClave').placeholder = d.config.cam_clave_guardada ? '•••• guardada (vacío = no cambiar)' : '';
+    }
+  } catch (e) { manejarError(e, msg, 'Error de comunicación con el servidor'); }
+}
+
+// Vista de prueba de la cámara para el administrador (no necesita clave de evento)
+async function probarCamara() {
+  const msg = $('msgCam');
+  try {
+    const d = await postJSON('/api/camara/token', {});
+    if (!d.ok) { msg.className = 'msg err'; msg.textContent = d.error || 'No se pudo abrir la cámara'; return; }
+    msg.className = 'msg'; msg.textContent = 'Conectando con la cámara…';
+    camAdmin = await ponerCamara($('camAdmin'), camAdmin, d.ws, msg);
   } catch (e) { manejarError(e, msg, 'Error de comunicación con el servidor'); }
 }
 
@@ -812,6 +914,11 @@ function agregarPrograma() {
 
 auth = leerAuth();
 if (location.hash === '#admin') irAdmin(); else mostrar('vistaAbrir');
+</script>
+<script type="module">
+// Reproductor de go2rtc (MIT, AlexxIT): copia local de video-rtc.js v1.6.0
+import {VideoRTC} from './video-rtc.js';
+customElements.define('camara-porton', class extends VideoRTC {});
 </script>
 </body>
 </html>
